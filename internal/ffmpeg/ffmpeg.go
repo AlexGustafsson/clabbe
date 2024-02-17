@@ -69,7 +69,7 @@ func (f *FFMPEG) Run() error {
 	f.wg.Go(func() error {
 		scanner := bufio.NewScanner(reader)
 		for scanner.Scan() {
-			slog.Debug(scanner.Text())
+			slog.Debug(scanner.Text(), slog.String("component", "ffmpeg"))
 		}
 		return nil
 	})
