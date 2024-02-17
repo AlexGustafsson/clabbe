@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
+	"github.com/AlexGustafsson/clabbe/internal/openai"
 	"github.com/AlexGustafsson/clabbe/internal/streaming"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
 	"github.com/bwmarrin/discordgo"
@@ -17,13 +19,16 @@ import (
 
 type Bot struct {
 	discord *discordgo.Session
+	openai  *openai.Client
 
 	mutex         sync.Mutex
 	currentStream streaming.AudioStream
 }
 
-func NewBot(token string) (*Bot, error) {
-	bot := &Bot{}
+func NewBot(token string, openAIClient *openai.Client) (*Bot, error) {
+	bot := &Bot{
+		openai: openAIClient,
+	}
 
 	var err error
 	bot.discord, err = discordgo.New("Bot " + token)
@@ -59,6 +64,23 @@ func NewBot(token string) (*Bot, error) {
 				Description: "Stop any music currently playing",
 			},
 		},
+	}
+
+	if openAIClient != nil {
+		commands["playai"] = &Command{
+			Handler: bot.handlePlayCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Play music in the voice channel you're in",
+				Options: []*discordgo.ApplicationCommandOption{
+					{
+						Name:        "query",
+						Type:        discordgo.ApplicationCommandOptionString,
+						Description: "LLM query",
+						Required:    true,
+					},
+				},
+			},
+		}
 	}
 
 	slog.Debug("Registering bot commands")
@@ -158,6 +180,69 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 				Content: "A song is already playing. Try again later.",
 			},
 		})
+	}
+
+	if event.ApplicationCommandData().Name == "playai" && b.openai != nil {
+		slog.Debug("Using OpenAI to handle query")
+		res, err := b.openai.FetchCompletion(&openai.CompletionRequest{
+			Messages: []openai.Message{
+				{
+					Role:    openai.RoleSystem,
+					Content: DefaultPrompt,
+				},
+				{
+					Role:    openai.RoleUser,
+					Content: query,
+				},
+			},
+			Temperature:      1,
+			MaxTokens:        256,
+			TopP:             1,
+			FrequencyPenalty: 0,
+			PresencePenalty:  0,
+			Model:            openai.DefaultModel,
+			Stream:           false,
+		})
+		if err != nil {
+			slog.Error("Failed to invoke LLM", slog.Any("error", err))
+			return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Sorry, I can't handle that right now. Try again in a little while.",
+				},
+			})
+		}
+
+		if len(res.Choices) == 0 {
+			slog.Warn("No reply from LLM")
+			return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Sorry, I can't handle that right now. Try again in a little while.",
+				},
+			})
+		}
+
+		response := res.Choices[0].Message.Content
+		slog.Debug("Got response from Open AI", slog.String("response", response))
+		// TODO: Assume default prompt for now
+		entries := strings.Split(response, "\n")
+
+		// TODO: Queue
+		// The default output has indexes, remove them
+		_, firstEntry, _ := strings.Cut(entries[0], " ")
+
+		if strings.EqualFold(firstEntry, "no response") {
+			return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "I couldn't find anything for the provided query. Try another.",
+				},
+			})
+		}
+
+		slog.Debug("Settled on query using LLM", slog.String("query", firstEntry))
+		query = firstEntry
 	}
 
 	results, err := youtube.Search(ctx, query)

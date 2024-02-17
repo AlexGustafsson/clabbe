@@ -8,11 +8,17 @@ import (
 	"syscall"
 
 	"github.com/AlexGustafsson/clabbe/internal/discord"
+	"github.com/AlexGustafsson/clabbe/internal/openai"
 )
 
-func run(ctx context.Context, token string) error {
+func run(ctx context.Context, token string, openAIKey string) error {
 
-	bot, err := discord.NewBot(token)
+	var openAIClient *openai.Client
+	if openAIKey != "" {
+		openAIClient = openai.NewClient(openAIKey)
+	}
+
+	bot, err := discord.NewBot(token, openAIClient)
 	if err != nil {
 		slog.Error("Failed to start bot", slog.Any("error", err))
 		return err
@@ -29,10 +35,15 @@ func main() {
 		Level: slog.LevelDebug,
 	})))
 
-	token, ok := os.LookupEnv("DISCORD_BOT_TOKEN")
+	discordBotToken, ok := os.LookupEnv("DISCORD_BOT_TOKEN")
 	if !ok {
 		slog.Error("Missing required environment variable DISCORD_BOT_TOKEN")
 		os.Exit(1)
+	}
+
+	openAIKey, ok := os.LookupEnv("OPENAI_API_KEY")
+	if !ok {
+		slog.Warn("Missing OpenAI API key - disabling advanced features")
 	}
 
 	// Exit on SIGINT or SIGTERM
@@ -54,7 +65,7 @@ func main() {
 		}
 	}()
 
-	if err := run(ctx, token); err != nil {
+	if err := run(ctx, discordBotToken, openAIKey); err != nil {
 		slog.Error("Program was unsuccessful", slog.Any("error", err))
 		os.Exit(1)
 	}
