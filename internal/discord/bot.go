@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
+	"github.com/AlexGustafsson/clabbe/internal/streaming"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
 	"github.com/bwmarrin/discordgo"
 	"github.com/pion/webrtc/v4/pkg/media/oggreader"
@@ -15,6 +17,9 @@ import (
 
 type Bot struct {
 	discord *discordgo.Session
+
+	mutex         sync.Mutex
+	currentStream streaming.AudioStream
 }
 
 func NewBot(token string) (*Bot, error) {
@@ -46,6 +51,12 @@ func NewBot(token string) (*Bot, error) {
 						Required:    true,
 					},
 				},
+			},
+		},
+		"stop": {
+			Handler: bot.handleStopCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Stop any music currently playing",
 			},
 		},
 	}
@@ -88,6 +99,9 @@ func (b *Bot) Stop() error {
 }
 
 func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
 	options := event.ApplicationCommandData().Options
 
 	query := ""
@@ -136,6 +150,16 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 		})
 	}
 
+	// TODO: Playlist
+	if b.currentStream != nil {
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "A song is already playing. Try again later.",
+			},
+		})
+	}
+
 	results, err := youtube.Search(ctx, query)
 	if err != nil {
 		slog.Error("Failed to perform search", slog.Any("error", err))
@@ -156,7 +180,7 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 		})
 	}
 
-	stream, err := youtube.NewAudioStream(ctx, results[0], nil)
+	stream, err := youtube.NewAudioStream(context.Background(), results[0], nil)
 	if err != nil {
 		slog.Error("Failed to create YouTube audio stream", slog.Any("error", err))
 		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
@@ -178,8 +202,13 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 		})
 	}
 
+	b.currentStream = stream
+
 	go func() {
-		defer stream.Close()
+		defer func() {
+			stream.Close()
+			b.currentStream = nil
+		}()
 
 		channel, err := b.discord.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
 		if err != nil {
@@ -191,6 +220,10 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 			channel.Disconnect()
 		}()
 
+		channel.LogLevel = discordgo.LogDebug
+
+		time.Sleep(250 * time.Millisecond)
+
 		channel.Speaking(true)
 
 		reader, _, err := oggreader.NewWith(normalizedStream)
@@ -201,8 +234,12 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 
 		for {
 			page, _, err := reader.ParseNextPage()
-			if err != nil && err != io.EOF {
-				slog.Error("Failed to read ogg page", slog.Any("error", err))
+			if err != nil {
+				if err == io.EOF {
+					slog.Debug("Stream ended")
+				} else {
+					slog.Error("Failed to read ogg page", slog.Any("error", err))
+				}
 				break
 			}
 
@@ -217,6 +254,29 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: fmt.Sprintf("Playing: %s", stream.Title()),
+		},
+	})
+}
+
+func (b *Bot) handleStopCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if b.currentStream != nil {
+		title := b.currentStream.Title()
+		b.currentStream.Close()
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Stopped %s", title),
+			},
+		})
+	}
+
+	return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "No music is playing",
 		},
 	})
 }
