@@ -11,7 +11,7 @@ import (
 func TestSearchClient(t *testing.T) {
 	client := NewSearchClient()
 
-	ids, err := client.Search(context.Background(), "test")
+	ids, err := client.Search(context.Background(), "youtube-dl test video")
 	require.NoError(t, err)
 
 	fmt.Println(ids)
