@@ -9,8 +9,7 @@ import (
 )
 
 func TestSearchClient(t *testing.T) {
-	client, err := NewSearchClient(context.Background())
-	require.NoError(t, err)
+	client := NewSearchClient()
 
 	ids, err := client.Search(context.Background(), "test")
 	require.NoError(t, err)
