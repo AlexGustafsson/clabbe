@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -24,6 +25,11 @@ func NewSearchClient() *SearchClient {
 	}
 }
 
+func Search(ctx context.Context, query string) ([]string, error) {
+	client := NewSearchClient()
+	return client.Search(ctx, query)
+}
+
 func (c *SearchClient) Search(ctx context.Context, query string) ([]string, error) {
 	// Build request URL
 	searchURL := url.URL{
@@ -38,12 +44,14 @@ func (c *SearchClient) Search(ctx context.Context, query string) ([]string, erro
 
 	req, _ := http.NewRequest(http.MethodGet, searchURL.String(), nil)
 
+	slog.Debug("Performing search request", slog.String("query", query))
 	res, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
 	if res.StatusCode != http.StatusOK {
+		slog.Error("Failed to perform search", slog.String("status", res.Status))
 		return nil, fmt.Errorf("unexpected status: %s", res.Status)
 	}
 
@@ -87,5 +95,6 @@ func (c *SearchClient) Search(ctx context.Context, query string) ([]string, erro
 		}
 	}
 
+	slog.Debug("Successfully performed search", slog.Int("results", len(ids)))
 	return ids, nil
 }
