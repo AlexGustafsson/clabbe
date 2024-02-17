@@ -52,6 +52,7 @@ func NewNormalizedAudioStream(reader io.Reader) (*NormalizedAudioStream, error) 
 		if err := ffmpeg.Run(); err != nil {
 			stream.ffmpegErr = err
 		}
+		normalizedReader.Close()
 	}()
 
 	return stream, nil
