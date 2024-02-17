@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
@@ -53,7 +55,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(context.Background(), os.Args[1]); err != nil {
+	// Exit on SIGINT or SIGTERM
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		abort := make(chan os.Signal, 1)
+		signal.Notify(abort, syscall.SIGINT, syscall.SIGTERM)
+		caught := 0
+		for {
+			<-abort
+			caught++
+			if caught == 1 {
+				slog.Info("Caught signal, exiting gracefully")
+				cancel()
+			} else {
+				slog.Info("Caught signal, exiting now")
+				os.Exit(1)
+			}
+		}
+	}()
+
+	if err := run(ctx, os.Args[1]); err != nil {
+		slog.Error("Program was unsuccessful", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
