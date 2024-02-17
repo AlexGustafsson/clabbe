@@ -18,8 +18,13 @@ func NewNormalizedAudioStream(reader io.Reader) (*NormalizedAudioStream, error) 
 		Stdin: reader,
 		Arguments: func(endpoint string) []string {
 			arguments := []string{
-				"-re", "-i", "pipe:",
+				"-i", "pipe:",
+				// Make sure the audio is resampled to 2 channel, 48kHz
+				"-ac", "2", "-ar", "48000",
 				"-filter:a", "loudnorm",
+				// OPUS supports up to 60ms windows. FFMPEG likes 1s by default.
+				// Use 20ms as too high windows will not work with Discord
+				"-page_duration", "20000",
 				"-c:a", "libopus",
 				path.Join(endpoint, "audio.ogg"),
 			}

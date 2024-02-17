@@ -1,9 +1,15 @@
 package discord
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
+	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
 	"github.com/bwmarrin/discordgo"
+	"github.com/pion/webrtc/v4/pkg/media/oggreader"
 )
 
 type Bot struct {
@@ -19,7 +25,12 @@ func NewBot(token string) (*Bot, error) {
 		return nil, err
 	}
 
-	// bot.discord.AddHandler(bot.onReady)
+	bot.discord.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildVoiceStates
+
+	slog.Debug("Connecting bot")
+	if err := bot.discord.Open(); err != nil {
+		return nil, err
+	}
 
 	commands := map[string]*Command{
 		"play": {
@@ -31,12 +42,14 @@ func NewBot(token string) (*Bot, error) {
 						Name:        "query",
 						Type:        discordgo.ApplicationCommandOptionString,
 						Description: "YouTube search query",
+						Required:    true,
 					},
 				},
 			},
 		},
 	}
 
+	slog.Debug("Registering bot commands")
 	// TODO: Do we need to remove the commands when we leave?
 	for commandName, command := range commands {
 		command.ApplicationCommand.Name = commandName
@@ -56,42 +69,150 @@ func NewBot(token string) (*Bot, error) {
 			return
 		}
 
-		if err := command.Handler(session, event); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := command.Handler(ctx, session, event); err != nil {
 			slog.Error("Failed to handle command", slog.Any("error", err))
 		}
 	})
 
-	return bot, nil
-}
+	slog.Info("Bot started")
 
-func (b *Bot) Start() error {
-	return b.discord.Open()
+	return bot, nil
 }
 
 func (b *Bot) Stop() error {
 	return b.discord.Close()
 }
 
-func (b *Bot) handlePlayCommand(session *discordgo.Session, event *discordgo.InteractionCreate) error {
+func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	options := event.ApplicationCommandData().Options
+
+	query := ""
+	for _, option := range options {
+		if option.Name == "query" {
+			query = option.StringValue()
+		}
+	}
+
+	if query == "" {
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You need to specify a search query.",
+			},
+		})
+	}
+
+	// Find the channel that the message came from.
+	channel, err := b.discord.State.Channel(event.ChannelID)
+	if err != nil {
+		return fmt.Errorf("failed to identify event's channel")
+	}
+
+	// Find the guild for that channel.
+	guild, err := b.discord.State.Guild(channel.GuildID)
+	if err != nil {
+		return fmt.Errorf("failed to identify event's guild")
+	}
+
+	// Find the voice channel of the sender
+	voiceChannelID := ""
+	for _, voiceStates := range guild.VoiceStates {
+		if voiceStates.UserID == event.Member.User.ID {
+			voiceChannelID = voiceStates.ChannelID
+			break
+		}
+	}
+
+	if voiceChannelID == "" {
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You need to be in a voice channel to play music.",
+			},
+		})
+	}
+
+	results, err := youtube.Search(ctx, query)
+	if err != nil {
+		slog.Error("Failed to perform search", slog.Any("error", err))
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Sorry, I can't search for that right now. Try again in a little while.",
+			},
+		})
+	}
+
+	if len(results) == 0 {
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "I couldn't find anything for the provided query. Try another.",
+			},
+		})
+	}
+
+	stream, err := youtube.NewAudioStream(ctx, results[0], nil)
+	if err != nil {
+		slog.Error("Failed to create YouTube audi stream", slog.Any("error", err))
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Sorry, I can't play that right now. Try again in a little while.",
+			},
+		})
+	}
+
+	normalizedStream, err := ffmpeg.NewNormalizedAudioStream(stream)
+	if err != nil {
+		slog.Error("Failed to create normalized stream", slog.Any("error", err))
+		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Sorry, I can't play that right now. Try again in a little while.",
+			},
+		})
+	}
+
+	go func() {
+		defer stream.Close()
+
+		channel, err := b.discord.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
+		if err != nil {
+			slog.Error("Failed to join channel", slog.Any("error", err))
+			return
+		}
+		defer func() {
+			channel.Speaking(false)
+			channel.Disconnect()
+		}()
+
+		channel.Speaking(true)
+
+		reader, _, err := oggreader.NewWith(normalizedStream)
+		if err != nil {
+			slog.Error("Failed to create ogg reader", slog.Any("error", err))
+			return
+		}
+
+		for {
+			page, _, err := reader.ParseNextPage()
+			if err != nil {
+				slog.Error("Failed to read ogg page", slog.Any("error", err))
+				return
+			}
+
+			channel.OpusSend <- page
+		}
+	}()
+
 	return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: "Hello, World!",
+			Content: fmt.Sprintf("Playing: %s", stream.Title()),
 		},
 	})
 }
-
-// func (b *Bot) onReady(s *discordgo.Session, event *discordgo.Ready) {
-// 	slog.Info("Bot is ready")
-// }
-
-// func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
-// 	// Ignore all messages created by the bot itself
-// 	if m.Author.ID == s.State.User.ID {
-// 		return
-// 	}
-
-// 	if strings.HasPrefix(m.Content, "!play ") {
-
-// 	}
-// }
