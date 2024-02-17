@@ -18,10 +18,14 @@ func NewNormalizedAudioStream(reader io.Reader) (*NormalizedAudioStream, error) 
 		Stdin: reader,
 		Arguments: func(endpoint string) []string {
 			arguments := []string{
-				"-i", "pipe:",
-				// Make sure the audio is resampled to 2 channel, 48kHz
-				"-ac", "2", "-ar", "48000",
-				"-filter:a", "loudnorm",
+				"-re", "-i", "pipe:",
+				// Make sure the audio is resampled to 2 channel, 48kHz, 96kbps
+				"-ac", "2", "-ar", "48000", "-b:a", "96000",
+				// Normalize according to Spotify's guidelines
+				// TODO: For now, don't normalize audio. IT can create a lot of noise
+				// at the start of songs. The dynamic normalization filter makes the
+				// sound sound wobbly
+				// "-filter:a", "loudnorm=I=-14:TP=-2.0:LRA=7.0:linear=true:print_format=summary",
 				// OPUS supports up to 60ms windows. FFMPEG likes 1s by default.
 				// Use 20ms as too high windows will not work with Discord
 				"-page_duration", "20000",
@@ -50,9 +54,9 @@ func NewNormalizedAudioStream(reader io.Reader) (*NormalizedAudioStream, error) 
 
 	go func() {
 		if err := ffmpeg.Run(); err != nil {
+			normalizedWriter.Close()
 			stream.ffmpegErr = err
 		}
-		normalizedReader.Close()
 	}()
 
 	return stream, nil
