@@ -29,7 +29,10 @@ func run(ctx context.Context, query string) error {
 		return err
 	}
 
-	defer stream.Close()
+	go func() {
+		<-ctx.Done()
+		stream.Close()
+	}()
 
 	normalizedStream, err := ffmpeg.NewNormalizedAudioStream(stream)
 	if err != nil {

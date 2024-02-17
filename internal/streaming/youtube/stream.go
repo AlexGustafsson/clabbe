@@ -91,13 +91,6 @@ func NewAudioStream(ctx context.Context, id string, options *StreamOptions) (*Au
 		return nil, err
 	}
 
-	// Close the reader when the context is canceled
-	go func() {
-		<-ctx.Done()
-		slog.Debug("Context canceled, closing stream reader")
-		reader.Close()
-	}()
-
 	return &AudioStream{
 		title:  video.Title,
 		reader: reader,
