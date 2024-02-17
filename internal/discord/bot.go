@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -157,7 +158,7 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 
 	stream, err := youtube.NewAudioStream(ctx, results[0], nil)
 	if err != nil {
-		slog.Error("Failed to create YouTube audi stream", slog.Any("error", err))
+		slog.Error("Failed to create YouTube audio stream", slog.Any("error", err))
 		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -200,13 +201,16 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 
 		for {
 			page, _, err := reader.ParseNextPage()
-			if err != nil {
+			if err != nil && err != io.EOF {
 				slog.Error("Failed to read ogg page", slog.Any("error", err))
-				return
+				break
 			}
 
 			channel.OpusSend <- page
 		}
+
+		// Make sure buffers are emptied
+		time.Sleep(500 * time.Millisecond)
 	}()
 
 	return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{

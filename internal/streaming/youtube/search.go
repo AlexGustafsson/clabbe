@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 )
 
 var initialDataRegex = regexp.MustCompile(`var ytInitialData = (.*?)};`)
@@ -94,6 +95,11 @@ func (c *SearchClient) Search(ctx context.Context, query string) ([]string, erro
 			ids = append(ids, content.VideoRenderer.VideoID)
 		}
 	}
+
+	// Some ids might be empty every now and then - filter these out
+	ids = slices.DeleteFunc(ids, func(s string) bool {
+		return s == ""
+	})
 
 	slog.Debug("Successfully performed search", slog.Int("results", len(ids)))
 	return ids, nil
