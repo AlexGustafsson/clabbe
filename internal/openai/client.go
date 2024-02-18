@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -81,7 +82,7 @@ type CompletionUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-func (c *Client) FetchCompletion(request *CompletionRequest) (*CompletionResponse, error) {
+func (c *Client) FetchCompletion(ctx context.Context, request *CompletionRequest) (*CompletionResponse, error) {
 	if request.Stream {
 		return nil, fmt.Errorf("stream mode is unsupported")
 	}
@@ -91,7 +92,7 @@ func (c *Client) FetchCompletion(request *CompletionRequest) (*CompletionRespons
 		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

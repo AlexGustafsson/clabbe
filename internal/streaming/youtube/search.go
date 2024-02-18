@@ -26,12 +26,17 @@ func NewSearchClient() *SearchClient {
 	}
 }
 
-func Search(ctx context.Context, query string) ([]string, error) {
+func Search(ctx context.Context, query string) ([]SearchResult, error) {
 	client := NewSearchClient()
 	return client.Search(ctx, query)
 }
 
-func (c *SearchClient) Search(ctx context.Context, query string) ([]string, error) {
+type SearchResult struct {
+	ID    string
+	Title string
+}
+
+func (c *SearchClient) Search(ctx context.Context, query string) ([]SearchResult, error) {
 	// Build request URL
 	searchURL := url.URL{
 		Scheme: "https",
@@ -76,6 +81,11 @@ func (c *SearchClient) Search(ctx context.Context, query string) ([]string, erro
 								Contents []struct {
 									VideoRenderer struct {
 										VideoID string `json:"videoId"`
+										Title   struct {
+											Runs []struct {
+												Text string `json:"text"`
+											} `json:"runs"`
+										} `json:"title"`
 									} `json:"videoRenderer"`
 								} `json:"contents"`
 							} `json:"itemSectionRenderer"`
@@ -89,18 +99,25 @@ func (c *SearchClient) Search(ctx context.Context, query string) ([]string, erro
 		return nil, err
 	}
 
-	ids := make([]string, 0)
+	results := make([]SearchResult, 0)
 	for _, content := range initialData.Contents.TwoColumnSearchResultsRenderer.PrimaryContents.SectionListRenderer.Contents {
 		for _, content := range content.ItemSectionRenderer.Contents {
-			ids = append(ids, content.VideoRenderer.VideoID)
+			title := ""
+			if len(content.VideoRenderer.Title.Runs) > 0 {
+				title = content.VideoRenderer.Title.Runs[0].Text
+			}
+			results = append(results, SearchResult{
+				ID:    content.VideoRenderer.VideoID,
+				Title: title,
+			})
 		}
 	}
 
 	// Some ids might be empty every now and then - filter these out
-	ids = slices.DeleteFunc(ids, func(s string) bool {
-		return s == ""
+	results = slices.DeleteFunc(results, func(result SearchResult) bool {
+		return result.ID == ""
 	})
 
-	slog.Debug("Successfully performed search", slog.Int("results", len(ids)))
-	return ids, nil
+	slog.Debug("Successfully performed search", slog.Int("results", len(results)))
+	return results, nil
 }

@@ -22,8 +22,8 @@ func run(ctx context.Context, query string) error {
 		return fmt.Errorf("no results")
 	}
 
-	slog.Debug("Creating audio stream", slog.String("id", results[0]))
-	stream, err := youtube.NewAudioStream(ctx, results[0], nil)
+	slog.Debug("Creating audio stream", slog.String("id", results[0].ID))
+	stream, err := youtube.NewAudioStream(ctx, results[0].ID, nil)
 	if err != nil {
 		slog.Error("Failed to fetch audio stream", slog.Any("error", err))
 		return err

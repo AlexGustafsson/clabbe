@@ -3,51 +3,45 @@ package discord
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
-	"github.com/AlexGustafsson/clabbe/internal/openai"
-	"github.com/AlexGustafsson/clabbe/internal/streaming"
-	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
+	"github.com/AlexGustafsson/clabbe/internal/bot"
 	"github.com/bwmarrin/discordgo"
-	"github.com/pion/webrtc/v4/pkg/media/oggreader"
 )
 
-type Bot struct {
+type Conn struct {
+	bot     *bot.Bot
 	discord *discordgo.Session
-	openai  *openai.Client
 
-	mutex         sync.Mutex
-	currentStream streaming.AudioStream
+	mutex       sync.Mutex
+	isConnected bool
 }
 
-func NewBot(token string, openAIClient *openai.Client) (*Bot, error) {
-	bot := &Bot{
-		openai: openAIClient,
+func Dial(bot *bot.Bot, token string) (*Conn, error) {
+	conn := &Conn{
+		bot: bot,
 	}
 
 	var err error
-	bot.discord, err = discordgo.New("Bot " + token)
+	conn.discord, err = discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
 	}
 
-	bot.discord.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildVoiceStates
+	conn.discord.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildVoiceStates
 
-	slog.Debug("Connecting bot")
-	if err := bot.discord.Open(); err != nil {
+	slog.Debug("Connecting to Discord")
+	if err := conn.discord.Open(); err != nil {
 		return nil, err
 	}
 
 	commands := map[string]*Command{
-		"play": {
-			Handler: bot.handlePlayCommand,
+		"queue": {
+			Handler: conn.handleQueueCommand,
 			ApplicationCommand: &discordgo.ApplicationCommand{
-				Description: "Play music in the voice channel you're in",
+				Description: "Queue music in the voice channel you're in",
 				Options: []*discordgo.ApplicationCommandOption{
 					{
 						Name:        "query",
@@ -58,19 +52,31 @@ func NewBot(token string, openAIClient *openai.Client) (*Bot, error) {
 				},
 			},
 		},
+		"playlist": {
+			Handler: conn.handlePlaylistCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Print playlist",
+			},
+		},
 		"stop": {
-			Handler: bot.handleStopCommand,
+			Handler: conn.handleStopCommand,
 			ApplicationCommand: &discordgo.ApplicationCommand{
 				Description: "Stop any music currently playing",
 			},
 		},
+		"skip": {
+			Handler: conn.handleSkipCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Skip the current song",
+			},
+		},
 	}
 
-	if openAIClient != nil {
-		commands["playai"] = &Command{
-			Handler: bot.handlePlayCommand,
+	if bot.OpenAIEnabled() {
+		commands["suggest"] = &Command{
+			Handler: conn.handleSuggestCommand,
 			ApplicationCommand: &discordgo.ApplicationCommand{
-				Description: "Play music in the voice channel you're in",
+				Description: "Suggest songs, artists or vibes to be played using AI",
 				Options: []*discordgo.ApplicationCommandOption{
 					{
 						Name:        "query",
@@ -81,25 +87,39 @@ func NewBot(token string, openAIClient *openai.Client) (*Bot, error) {
 				},
 			},
 		}
+
+		commands["suggestions"] = &Command{
+			Handler: conn.handlePlaylistCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Print suggestions",
+			},
+		}
 	}
 
-	slog.Debug("Registering bot commands")
+	slog.Debug("Registering commands")
 	// TODO: Do we need to remove the commands when we leave?
 	for commandName, command := range commands {
 		command.ApplicationCommand.Name = commandName
-		_, err := bot.discord.ApplicationCommandCreate(bot.discord.State.User.ID, "", command.ApplicationCommand)
+		_, err := conn.discord.ApplicationCommandCreate(conn.discord.State.User.ID, "", command.ApplicationCommand)
 		if err != nil {
-			bot.discord.Close()
+			conn.discord.Close()
 			return nil, err
 		}
 	}
 
 	// Add a handler for command interactions
-	bot.discord.AddHandler(func(session *discordgo.Session, event *discordgo.InteractionCreate) {
+	conn.discord.AddHandler(func(session *discordgo.Session, event *discordgo.InteractionCreate) {
 		commandName := event.ApplicationCommandData().Name
 		command, ok := commands[commandName]
 		if !ok {
 			slog.Warn("Got command interaction for unknown command", slog.String("name", commandName))
+			return
+		}
+
+		if err := session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		}); err != nil {
+			slog.Error("Failed to acknowledge command", slog.Any("error", err))
 			return
 		}
 
@@ -108,50 +128,37 @@ func NewBot(token string, openAIClient *openai.Client) (*Bot, error) {
 
 		if err := command.Handler(ctx, session, event); err != nil {
 			slog.Error("Failed to handle command", slog.Any("error", err))
+			conn.updateResponse(session, event, "An error occured. Try again in a little while.")
 		}
 	})
 
 	slog.Info("Bot started")
 
-	return bot, nil
+	return conn, nil
 }
 
-func (b *Bot) Stop() error {
-	return b.discord.Close()
+func (c *Conn) Close() error {
+	return c.discord.Close()
 }
 
-func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
+func (c *Conn) updateResponse(session *discordgo.Session, event *discordgo.InteractionCreate, content string) error {
+	_, err := session.FollowupMessageCreate(event.Interaction, false, &discordgo.WebhookParams{
+		Content: content,
+	})
+	return err
+}
 
-	options := event.ApplicationCommandData().Options
-
-	query := ""
-	for _, option := range options {
-		if option.Name == "query" {
-			query = option.StringValue()
-		}
-	}
-
-	if query == "" {
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "You need to specify a search query.",
-			},
-		})
-	}
-
+func (c *Conn) parseVoiceChannel(session *discordgo.Session, event *discordgo.InteractionCreate) (string, string, error) {
 	// Find the channel that the message came from.
-	channel, err := b.discord.State.Channel(event.ChannelID)
+	channel, err := c.discord.State.Channel(event.ChannelID)
 	if err != nil {
-		return fmt.Errorf("failed to identify event's channel")
+		return "", "", fmt.Errorf("failed to identify event's channel")
 	}
 
 	// Find the guild for that channel.
-	guild, err := b.discord.State.Guild(channel.GuildID)
+	guild, err := c.discord.State.Guild(channel.GuildID)
 	if err != nil {
-		return fmt.Errorf("failed to identify event's guild")
+		return "", "", fmt.Errorf("failed to identify event's guild")
 	}
 
 	// Find the voice channel of the sender
@@ -164,138 +171,107 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 	}
 
 	if voiceChannelID == "" {
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "You need to be in a voice channel to play music.",
-			},
-		})
+		return "", "", c.updateResponse(session, event, "You need to be in a voice channel to do that.")
 	}
 
-	// TODO: Playlist
-	if b.currentStream != nil {
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "A song is already playing. Try again later.",
-			},
-		})
-	}
+	return guild.ID, voiceChannelID, nil
+}
 
-	if event.ApplicationCommandData().Name == "playai" && b.openai != nil {
-		slog.Debug("Using OpenAI to handle query")
-		res, err := b.openai.FetchCompletion(&openai.CompletionRequest{
-			Messages: []openai.Message{
-				{
-					Role:    openai.RoleSystem,
-					Content: DefaultPrompt,
-				},
-				{
-					Role:    openai.RoleUser,
-					Content: query,
-				},
-			},
-			Temperature:      1,
-			MaxTokens:        256,
-			TopP:             1,
-			FrequencyPenalty: 0,
-			PresencePenalty:  0,
-			Model:            openai.DefaultModel,
-			Stream:           false,
-		})
-		if err != nil {
-			slog.Error("Failed to invoke LLM", slog.Any("error", err))
-			return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "Sorry, I can't handle that right now. Try again in a little while.",
-				},
-			})
+func (c *Conn) parseQuery(session *discordgo.Session, event *discordgo.InteractionCreate) (string, error) {
+	options := event.ApplicationCommandData().Options
+
+	query := ""
+	for _, option := range options {
+		if option.Name == "query" {
+			query = option.StringValue()
 		}
-
-		if len(res.Choices) == 0 {
-			slog.Warn("No reply from LLM")
-			return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "Sorry, I can't handle that right now. Try again in a little while.",
-				},
-			})
-		}
-
-		response := res.Choices[0].Message.Content
-		slog.Debug("Got response from Open AI", slog.String("response", response))
-		// TODO: Assume default prompt for now
-		entries := strings.Split(response, "\n")
-
-		// TODO: Queue
-		// The default output has indexes, remove them
-		_, firstEntry, _ := strings.Cut(entries[0], " ")
-
-		if strings.EqualFold(firstEntry, "no response") {
-			return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "I couldn't find anything for the provided query. Try another.",
-				},
-			})
-		}
-
-		slog.Debug("Settled on query using LLM", slog.String("query", firstEntry))
-		query = firstEntry
 	}
 
-	results, err := youtube.Search(ctx, query)
+	if query == "" {
+		return "", c.updateResponse(session, event, "You need to specify a search query.")
+	}
+
+	return query, nil
+}
+
+func (c *Conn) handleQueueCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	guildID, voiceChannelID, err := c.parseVoiceChannel(session, event)
 	if err != nil {
-		slog.Error("Failed to perform search", slog.Any("error", err))
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Sorry, I can't search for that right now. Try again in a little while.",
-			},
-		})
+		return err
 	}
 
-	if len(results) == 0 {
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "I couldn't find anything for the provided query. Try another.",
-			},
-		})
-	}
-
-	stream, err := youtube.NewAudioStream(context.Background(), results[0], nil)
+	query, err := c.parseQuery(session, event)
 	if err != nil {
-		slog.Error("Failed to create YouTube audio stream", slog.Any("error", err))
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Sorry, I can't play that right now. Try again in a little while.",
-			},
-		})
+		return err
 	}
 
-	normalizedStream, err := ffmpeg.NewNormalizedAudioStream(stream)
+	results, err := c.bot.Queue(ctx, query, nil)
 	if err != nil {
-		slog.Error("Failed to create normalized stream", slog.Any("error", err))
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Sorry, I can't play that right now. Try again in a little while.",
-			},
-		})
+		slog.Error("Failed to queue query results", slog.Any("error", err))
+		return c.updateResponse(session, event, "I can't do that right now. Try again in a little while.")
 	}
 
-	b.currentStream = stream
+	c.connectBot(guildID, voiceChannelID)
 
+	return c.updateResponse(session, event, fmt.Sprintf("Queued %d songs", len(results)))
+}
+
+func (c *Conn) handleSuggestCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	guildID, voiceChannelID, err := c.parseVoiceChannel(session, event)
+	if err != nil {
+		return err
+	}
+
+	query, err := c.parseQuery(session, event)
+	if err != nil {
+		return err
+	}
+
+	if err := c.bot.Suggest(ctx, query); err != nil {
+		slog.Error("Failed to suggest songs", slog.Any("error", err))
+		return c.updateResponse(session, event, "I can't do that right now. Try again in a little while.")
+	}
+
+	c.connectBot(guildID, voiceChannelID)
+
+	return c.updateResponse(session, event, "I'll take your suggestions into account.")
+}
+
+func (c *Conn) handleSkipCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	c.bot.Skip()
+	return c.updateResponse(session, event, "Skipping song.")
+}
+
+func (c *Conn) handleStopCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	c.bot.Stop()
+	return c.updateResponse(session, event, "Stopping.")
+}
+
+func (c *Conn) handlePlaylistCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	var playlist *bot.Playlist
+	if event.ApplicationCommandData().Name == "playlist" {
+		playlist = c.bot.Playlist()
+	} else if event.ApplicationCommandData().Name == "suggestions" {
+		playlist = c.bot.Suggestions()
+	} else {
+		panic("discord: unexpected command")
+	}
+
+	contents := playlist.String()
+	if contents == "" {
+		contents = "No songs are queued"
+	}
+
+	return c.updateResponse(session, event, contents)
+}
+
+func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 	go func() {
-		defer func() {
-			stream.Close()
-			b.currentStream = nil
-		}()
+		if c.isConnected {
+			return
+		}
 
-		channel, err := b.discord.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
+		channel, err := c.discord.ChannelVoiceJoin(guildID, voiceChannelID, false, true)
 		if err != nil {
 			slog.Error("Failed to join channel", slog.Any("error", err))
 			return
@@ -303,7 +279,9 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 		defer func() {
 			channel.Speaking(false)
 			channel.Disconnect()
+			c.isConnected = false
 		}()
+		c.isConnected = true
 
 		channel.LogLevel = discordgo.LogDebug
 
@@ -311,57 +289,11 @@ func (b *Bot) handlePlayCommand(ctx context.Context, session *discordgo.Session,
 
 		channel.Speaking(true)
 
-		reader, _, err := oggreader.NewWith(normalizedStream)
-		if err != nil {
-			slog.Error("Failed to create ogg reader", slog.Any("error", err))
-			return
-		}
-
-		for {
-			page, _, err := reader.ParseNextPage()
-			if err != nil {
-				if err == io.EOF {
-					slog.Debug("Stream ended")
-				} else {
-					slog.Error("Failed to read ogg page", slog.Any("error", err))
-				}
-				break
-			}
-
-			channel.OpusSend <- page
+		if err = c.bot.Play(channel.OpusSend); err != nil {
+			slog.Error("Failed to play", slog.Any("error", err))
 		}
 
 		// Make sure buffers are emptied
 		time.Sleep(500 * time.Millisecond)
 	}()
-
-	return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: fmt.Sprintf("Playing: %s", stream.Title()),
-		},
-	})
-}
-
-func (b *Bot) handleStopCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	if b.currentStream != nil {
-		title := b.currentStream.Title()
-		b.currentStream.Close()
-		return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("Stopped %s", title),
-			},
-		})
-	}
-
-	return session.InteractionRespond(event.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: "No music is playing",
-		},
-	})
 }
