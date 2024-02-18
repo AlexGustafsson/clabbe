@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -17,7 +18,7 @@ func TestFetchCompletion(t *testing.T) {
 
 	client := NewClient(apiKey)
 
-	res, err := client.FetchCompletion(&CompletionRequest{
+	res, err := client.FetchCompletion(context.Background(), &CompletionRequest{
 		Messages: []Message{
 			{
 				Role:    RoleSystem,

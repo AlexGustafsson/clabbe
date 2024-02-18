@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/AlexGustafsson/clabbe/internal/bot"
 	"github.com/AlexGustafsson/clabbe/internal/discord"
 	"github.com/AlexGustafsson/clabbe/internal/openai"
 )
@@ -18,7 +19,9 @@ func run(ctx context.Context, token string, openAIKey string) error {
 		openAIClient = openai.NewClient(openAIKey)
 	}
 
-	bot, err := discord.NewBot(token, openAIClient)
+	bot := bot.New(openAIClient)
+
+	conn, err := discord.Dial(bot, token)
 	if err != nil {
 		slog.Error("Failed to start bot", slog.Any("error", err))
 		return err
@@ -26,6 +29,7 @@ func run(ctx context.Context, token string, openAIKey string) error {
 
 	<-ctx.Done()
 	bot.Stop()
+	conn.Close()
 
 	return nil
 }
