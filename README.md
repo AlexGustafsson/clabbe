@@ -6,6 +6,15 @@ YouTube.
 
 Clabbe is named after a Swedish DJ.
 
+## Features
+
+- Uses AI to take requests and extrapolate new songs to play
+- Fetch songs from YouTube
+- Focus on performance. Docker image is 13MiB. Uses about 10MB of RAM at runtime
+  and virtually zero CPU. Other bots can use hundreds of megabytes of RAM and up
+  to one CPU core.
+- No config other than bot token necessary for basic functionality
+
 ## Using
 
 ### Discord
@@ -21,7 +30,7 @@ All commands require you to be in a voice channel.
 The queue command will search for a video on YouTube using the specified query.
 The top match is added at the end of the queue.
 
-If AI support is enabled and the interpolate option enabled (default), the bot
+If AI support is enabled and the extrapolate option enabled (default), the bot
 will fill the queue on its own once it's empty. It will do this by prioritizing
 songs it has added when receiving suggestions (see /suggest). If no suggestions
 have been added, it will try to play songs similar to recent listening history.
@@ -70,10 +79,14 @@ discordBotToken: xxx
 export DISCORD_BOT_TOKEN="xxx"
 ```
 
-The bot can then be started like so.
+The bot can then be started on the host or using Docker.
 
 ```shell
-./bot --config ./path/to/config/directory
+./bot --config ./config
+```
+
+```shell
+docker run ghrc.io/alexgustafsson/clabbe --config ./config
 ```
 
 ## Development
