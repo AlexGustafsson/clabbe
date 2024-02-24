@@ -10,11 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
 	"github.com/AlexGustafsson/clabbe/internal/openai"
 	"github.com/AlexGustafsson/clabbe/internal/streaming"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
-	"github.com/pion/webrtc/v4/pkg/media/oggreader"
+	"github.com/AlexGustafsson/clabbe/internal/webm"
 )
 
 var (
@@ -311,37 +310,29 @@ func (b *Bot) playOnce(entry PlaylistEntry, opus chan<- []byte) error {
 	}
 	defer stream.Close()
 
-	normalizedStream, err := ffmpeg.NewNormalizedAudioStream(stream)
-	if err != nil {
-		slog.Error("Failed to create normalized stream", slog.Any("error", err))
-		b.mutex.Unlock()
-		return err
+	if !strings.EqualFold(stream.MimeType(), `audio/webm; codecs="opus"`) {
+		// For now, don't support other formats as they would need to be processed
+		// by ffmpeg
+		return fmt.Errorf("unsupported codec: %s", stream.MimeType())
 	}
 
-	reader, _, err := oggreader.NewWith(normalizedStream)
-	if err != nil {
-		slog.Error("Failed to create ogg reader", slog.Any("error", err))
-		b.mutex.Unlock()
-		return err
-	}
+	webmReader := webm.NewReader(stream)
 
 	b.currentStream = stream
 	b.history.PushFront(entry)
 	b.mutex.Unlock()
 
 	for {
-		page, _, err := reader.ParseNextPage()
-		if err != nil {
-			if err == io.EOF {
-				slog.Debug("Stream ended")
-				break
-			} else {
-				slog.Error("Failed to read ogg page", slog.Any("error", err))
-				return err
-			}
+		frame, err := webmReader.Read()
+		if err == io.EOF {
+			slog.Debug("Stream ended")
+			break
+		} else if err != nil {
+			slog.Error("Failed to read webm OPUS frame", slog.Any("error", err))
+			return err
 		}
 
-		opus <- page
+		opus <- frame.Payload
 	}
 
 	slog.Debug("Stopped playing stream", slog.String("id", entry.ID), slog.String("title", stream.Title()))

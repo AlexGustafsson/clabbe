@@ -1,7 +1,6 @@
 package webm
 
 import (
-	"bufio"
 	"bytes"
 	_ "embed" // Embed files
 	"io"
@@ -20,7 +19,7 @@ import (
 var TestFile []byte
 
 func TestReader(t *testing.T) {
-	reader := NewReader(bufio.NewReader(bytes.NewReader(TestFile)))
+	reader := NewReader(bytes.NewReader(TestFile))
 
 	// As plain OPUS has very little support in players, mux it back to an ogg
 	// file

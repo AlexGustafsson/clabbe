@@ -1,7 +1,6 @@
 package webm
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -20,7 +19,7 @@ type Reader struct {
 	reader *ebml.Reader
 }
 
-func NewReader(reader *bufio.Reader) *Reader {
+func NewReader(reader io.Reader) *Reader {
 	return &Reader{
 		reader: ebml.NewReader(reader),
 	}
