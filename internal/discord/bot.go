@@ -280,6 +280,9 @@ func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 			channel.Speaking(false)
 			channel.Disconnect()
 			c.isConnected = false
+			c.discord.UpdateStatusComplex(discordgo.UpdateStatusData{
+				Activities: []*discordgo.Activity{},
+			})
 		}()
 		c.isConnected = true
 
