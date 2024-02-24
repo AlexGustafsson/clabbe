@@ -4,28 +4,29 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/AlexGustafsson/clabbe/internal/bot"
+	"github.com/AlexGustafsson/clabbe/internal/state"
 	"github.com/bwmarrin/discordgo"
 )
 
 type Conn struct {
+	state   *state.State
 	bot     *bot.Bot
 	discord *discordgo.Session
 
-	mutex       sync.Mutex
 	isConnected bool
 }
 
-func Dial(bot *bot.Bot, token string) (*Conn, error) {
+func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	conn := &Conn{
-		bot: bot,
+		state: state,
+		bot:   bot,
 	}
 
 	var err error
-	conn.discord, err = discordgo.New("Bot " + token)
+	conn.discord, err = discordgo.New("Bot " + state.Config.DiscordBotToken)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +39,12 @@ func Dial(bot *bot.Bot, token string) (*Conn, error) {
 	}
 
 	commands := map[string]*Command{
+		"play": {
+			Handler: conn.handlePlayCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Start playing music in the voice channel you're in",
+			},
+		},
 		"queue": {
 			Handler: conn.handleQueueCommand,
 			ApplicationCommand: &discordgo.ApplicationCommand{
@@ -194,6 +201,17 @@ func (c *Conn) parseQuery(session *discordgo.Session, event *discordgo.Interacti
 	return query, nil
 }
 
+func (c *Conn) handlePlayCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
+	guildID, voiceChannelID, err := c.parseVoiceChannel(session, event)
+	if err != nil {
+		return err
+	}
+
+	c.connectBot(guildID, voiceChannelID)
+
+	return c.updateResponse(session, event, "On my way!")
+}
+
 func (c *Conn) handleQueueCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
 	guildID, voiceChannelID, err := c.parseVoiceChannel(session, event)
 	if err != nil {
@@ -205,7 +223,12 @@ func (c *Conn) handleQueueCommand(ctx context.Context, session *discordgo.Sessio
 		return err
 	}
 
-	results, err := c.bot.Queue(ctx, query, nil)
+	entity := state.Entity{
+		Role: state.RoleUser,
+		ID:   fmt.Sprintf("%s/%s", guildID, event.Member.User.ID),
+		Name: event.Member.User.Username,
+	}
+	results, err := c.bot.Queue(ctx, query, entity, nil)
 	if err != nil {
 		slog.Error("Failed to queue query results", slog.Any("error", err))
 		return c.updateResponse(session, event, "I can't do that right now. Try again in a little while.")
@@ -227,7 +250,12 @@ func (c *Conn) handleSuggestCommand(ctx context.Context, session *discordgo.Sess
 		return err
 	}
 
-	if err := c.bot.Suggest(ctx, query); err != nil {
+	entity := state.Entity{
+		Role: state.RoleUser,
+		ID:   fmt.Sprintf("%s/%s", guildID, event.Member.User.ID),
+		Name: event.Member.User.Username,
+	}
+	if err := c.bot.Suggest(ctx, entity, query); err != nil {
 		slog.Error("Failed to suggest songs", slog.Any("error", err))
 		return c.updateResponse(session, event, "I can't do that right now. Try again in a little while.")
 	}
@@ -248,11 +276,11 @@ func (c *Conn) handleStopCommand(ctx context.Context, session *discordgo.Session
 }
 
 func (c *Conn) handlePlaylistCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
-	var playlist *bot.Playlist
+	var playlist *state.Playlist
 	if event.ApplicationCommandData().Name == "playlist" {
-		playlist = c.bot.Playlist()
+		playlist = c.state.Queue
 	} else if event.ApplicationCommandData().Name == "suggestions" {
-		playlist = c.bot.Suggestions()
+		playlist = c.state.Suggestions
 	} else {
 		panic("discord: unexpected command")
 	}

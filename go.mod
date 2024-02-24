@@ -4,11 +4,13 @@ go 1.21.7
 
 require (
 	github.com/bwmarrin/discordgo v0.27.1
+	github.com/caarlos0/env/v10 v10.0.0
 	github.com/kkdai/youtube/v2 v2.10.0
 	github.com/pion/rtp v1.8.3
 	github.com/pion/webrtc/v4 v4.0.0-beta.9
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/sync v0.1.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -24,5 +26,4 @@ require (
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
