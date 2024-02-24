@@ -289,7 +289,25 @@ func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 
 		channel.Speaking(true)
 
-		if err = c.bot.Play(channel.OpusSend); err != nil {
+		songs := make(chan string)
+		go func() {
+			for song := range songs {
+				slog.Debug("Adding presence")
+				err := c.discord.UpdateStatusComplex(discordgo.UpdateStatusData{
+					Activities: []*discordgo.Activity{
+						{
+							Name: song,
+							Type: discordgo.ActivityTypeListening,
+						},
+					},
+				})
+				if err != nil {
+					slog.Error("Failed to set presence", slog.Any("error", err))
+				}
+			}
+		}()
+
+		if err = c.bot.Play(channel.OpusSend, songs); err != nil {
 			slog.Error("Failed to play", slog.Any("error", err))
 		}
 
