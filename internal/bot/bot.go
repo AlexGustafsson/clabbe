@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AlexGustafsson/clabbe/internal/openai"
+	"github.com/AlexGustafsson/clabbe/internal/state"
 	"github.com/AlexGustafsson/clabbe/internal/streaming"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
 	"github.com/AlexGustafsson/clabbe/internal/webm"
@@ -21,27 +22,20 @@ var (
 )
 
 type Bot struct {
-	mutex       sync.Mutex
-	playlist    *Playlist
-	suggestions *Playlist
-	history     *Playlist
-
-	shouldPlay    bool
-	currentStream streaming.AudioStream
+	state *state.State
 
 	openai *openai.Client
 
-	InterpolateWhenEmpty bool
+	mutex         sync.Mutex
+	shouldPlay    bool
+	currentStream streaming.AudioStream
 }
 
-func New(openai *openai.Client) *Bot {
+func New(state *state.State, openai *openai.Client) *Bot {
 	return &Bot{
-		playlist:    NewPlaylist(),
-		suggestions: NewPlaylist(),
-		history:     NewPlaylist(),
-		openai:      openai,
+		state: state,
 
-		InterpolateWhenEmpty: true,
+		openai: openai,
 	}
 }
 
@@ -57,7 +51,7 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 			Messages: []openai.Message{
 				{
 					Role:    openai.RoleSystem,
-					Content: DefaultPrompt,
+					Content: b.state.Config.Prompt,
 				},
 				{
 					Role:    openai.RoleUser,
@@ -113,22 +107,16 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 type QueueOptions struct {
 	// UseAI defaults to false.
 	UseAI bool
-	// Source defaults to "human".
-	Source string
 }
 
 // Queue performs a search for content and adds the top result to the playlist.
-func (b *Bot) Queue(ctx context.Context, query string, options *QueueOptions) ([]youtube.SearchResult, error) {
+func (b *Bot) Queue(ctx context.Context, query string, addedBy state.Entity, options *QueueOptions) ([]youtube.SearchResult, error) {
 	slog.Debug("Got request to queue songs", slog.String("query", query))
 	if options == nil {
 		options = &QueueOptions{}
 	}
 
 	useAI := options.UseAI
-	source := options.Source
-	if source == "" {
-		source = "human"
-	}
 
 	results, err := b.Search(ctx, query, useAI)
 	if err != nil {
@@ -139,11 +127,12 @@ func (b *Bot) Queue(ctx context.Context, query string, options *QueueOptions) ([
 		slog.Debug("Got results", slog.Any("results", results))
 		b.mutex.Lock()
 		for _, result := range results {
-			b.playlist.Push(PlaylistEntry{
-				Source: source,
-				Added:  time.Now(),
-				ID:     result.ID,
-				Title:  result.Title,
+			b.state.Queue.AddEntry(state.PlaylistEntry{
+				Time:    time.Now(),
+				Title:   result.Title,
+				AddedBy: addedBy,
+				Source:  state.SourceYouTube,
+				URI:     result.ID,
 			})
 		}
 		b.mutex.Unlock()
@@ -160,7 +149,7 @@ type SuggestOptions struct {
 }
 
 // Suggest adds the results as a basis for songs to play when interpolating.
-func (b *Bot) Suggest(ctx context.Context, query string) error {
+func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) error {
 	slog.Debug("Got suggestion", slog.String("query", query))
 	results, err := b.Search(ctx, query, true)
 	if err != nil {
@@ -170,11 +159,12 @@ func (b *Bot) Suggest(ctx context.Context, query string) error {
 	slog.Debug("Got results", slog.Any("results", results))
 	b.mutex.Lock()
 	for _, result := range results {
-		b.suggestions.Push(PlaylistEntry{
-			Source: "human",
-			Added:  time.Now(),
-			ID:     result.ID,
-			Title:  result.Title,
+		b.state.Suggestions.AddEntry(state.PlaylistEntry{
+			Time:    time.Now(),
+			Title:   result.Title,
+			AddedBy: addedBy,
+			Source:  state.SourceYouTube,
+			URI:     result.ID,
 		})
 	}
 	b.mutex.Unlock()
@@ -187,11 +177,11 @@ func (b *Bot) Suggest(ctx context.Context, query string) error {
 func (b *Bot) Interpolate(ctx context.Context) error {
 	// If possible, use the suggestions immediately
 	b.mutex.Lock()
-	suggestions := b.suggestions.PopN(5)
+	suggestions := b.state.Suggestions.PopN(5)
 	if len(suggestions) > 0 {
 		slog.Debug("There were unused suggestions, use them first")
 		for _, suggestion := range suggestions {
-			b.playlist.Push(suggestion)
+			b.state.Queue.Push(suggestion)
 		}
 		b.mutex.Unlock()
 		return nil
@@ -204,7 +194,7 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 	}
 
 	var lookback strings.Builder
-	entries := b.history.PeakN(10)
+	entries := b.state.History.PeakN(10)
 	for i, entry := range entries {
 		fmt.Fprintf(&lookback, "%d: %s", i+1, entry.Title)
 	}
@@ -215,7 +205,7 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 		Messages: []openai.Message{
 			{
 				Role:    openai.RoleSystem,
-				Content: DefaultPrompt,
+				Content: b.state.Config.Prompt,
 			},
 			{
 				Role:    openai.RoleAssistant,
@@ -256,7 +246,10 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 	lines := strings.Split(response, "\n")
 	for _, line := range lines {
 		_, query, _ := strings.Cut(line, " ")
-		if _, err := b.Queue(ctx, strings.TrimSpace(query), &QueueOptions{Source: "ai"}); err != nil {
+		entity := state.Entity{
+			Role: state.RoleSystem,
+		}
+		if _, err := b.Queue(ctx, strings.TrimSpace(query), entity, nil); err != nil {
 			return err
 		}
 	}
@@ -275,13 +268,13 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 
 	failures := 0
 
-	for failures < 5 {
+	for failures < 5 && b.shouldPlay {
 		b.mutex.Lock()
-		entry, ok := b.playlist.Pop()
+		entry, ok := b.state.Queue.Pop()
 		b.mutex.Unlock()
 
 		if !ok {
-			if b.InterpolateWhenEmpty {
+			if b.state.Config.InterpolateWhenEmpty {
 				slog.Debug("Playlist is empty, interpolating")
 				err := b.Interpolate(context.Background())
 				if err != nil {
@@ -310,14 +303,15 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 
 // playOnce plays the entry, sending windows of OPUS-encoded audio to the
 // provided channel.
-func (b *Bot) playOnce(entry PlaylistEntry, opus chan<- []byte) error {
-	slog.Debug("Playing", slog.String("id", entry.ID), slog.String("Title", entry.Title))
+func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
+	slog.Debug("Playing", slog.String("uri", entry.URI), slog.String("title", entry.Title), slog.String("source", string(entry.Source)))
 	defer func() {
 		b.currentStream = nil
 	}()
 
+	// For now, assume YouTube as source
 	b.mutex.Lock()
-	stream, err := youtube.NewAudioStream(context.Background(), entry.ID, nil)
+	stream, err := youtube.NewAudioStream(context.Background(), entry.URI, nil)
 	if err != nil {
 		slog.Error("Failed to create YouTube audio stream", slog.Any("error", err))
 		b.mutex.Unlock()
@@ -334,7 +328,7 @@ func (b *Bot) playOnce(entry PlaylistEntry, opus chan<- []byte) error {
 	webmReader := webm.NewReader(stream)
 
 	b.currentStream = stream
-	b.history.PushFront(entry)
+	b.state.History.AddEntry(entry)
 	b.mutex.Unlock()
 
 	for {
@@ -353,7 +347,7 @@ func (b *Bot) playOnce(entry PlaylistEntry, opus chan<- []byte) error {
 		opus <- frame.Payload
 	}
 
-	slog.Debug("Stopped playing stream", slog.String("id", entry.ID), slog.String("title", stream.Title()))
+	slog.Debug("Stopped playing stream", slog.String("source", string(entry.Source)), slog.String("uri", entry.URI), slog.String("title", stream.Title()))
 	return nil
 }
 
@@ -363,26 +357,27 @@ func (b *Bot) ClearPlaylist() {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.playlist.Clear()
+	b.state.Queue.Clear()
 }
 
+// ClearSuggestions clears all suggestions.
 func (b *Bot) ClearSuggestions() {
 	slog.Debug("Clearing suggestions")
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.suggestions.Clear()
+	b.state.Suggestions.Clear()
 }
 
-// Stop stops the currently playing stream and clears the playlist.
+// Stop stops the currently playing stream.
 func (b *Bot) Stop() {
-	slog.Debug("Stopping playing stream and clearing playlist")
+	slog.Debug("Stopping playing stream")
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	b.shouldPlay = false
-	b.playlist.Clear()
-	b.suggestions.Clear()
+	// b.ClearPlaylist()
+	// b.ClearSuggestions()
 	if b.currentStream != nil {
 		b.currentStream.Close()
 	}
@@ -405,12 +400,4 @@ func (b *Bot) IsPlaying() bool {
 
 func (b *Bot) OpenAIEnabled() bool {
 	return b.openai != nil
-}
-
-func (b *Bot) Playlist() *Playlist {
-	return b.playlist
-}
-
-func (b *Bot) Suggestions() *Playlist {
-	return b.suggestions
 }
