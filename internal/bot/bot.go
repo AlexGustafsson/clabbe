@@ -172,9 +172,9 @@ func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) e
 	return nil
 }
 
-// Interpolate adds some entries to the playlist based on suggestions and
+// Extrapolate adds some entries to the playlist based on suggestions and
 // history.
-func (b *Bot) Interpolate(ctx context.Context) error {
+func (b *Bot) Extrapolate(ctx context.Context) error {
 	// If possible, use the suggestions immediately
 	b.mutex.Lock()
 	suggestions := b.state.Suggestions.PopN(5)
@@ -187,7 +187,7 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 		return nil
 	}
 
-	// If no suggestions were ready, interpolate based on history
+	// If no suggestions were ready, extrapolate based on history
 	if b.openai == nil {
 		b.mutex.Unlock()
 		return fmt.Errorf("missing required Open AI client")
@@ -274,9 +274,9 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 		b.mutex.Unlock()
 
 		if !ok {
-			if b.state.Config.InterpolateWhenEmpty {
+			if b.state.Config.ExtrapolateWhenEmpty {
 				slog.Debug("Playlist is empty, interpolating")
-				err := b.Interpolate(context.Background())
+				err := b.Extrapolate(context.Background())
 				if err != nil {
 					return err
 				}

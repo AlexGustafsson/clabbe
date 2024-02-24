@@ -14,7 +14,7 @@ type Config struct {
 	DiscordBotToken string `yaml:"discordBotToken,omitempty" env:"DISCORD_BOT_TOKEN"`
 	OpenAIKey       string `yaml:"openAiApiKey,omitempty" env:"OPENAI_API_KEY"`
 
-	InterpolateWhenEmpty bool `yaml:"interpolateWhenEmpty"`
+	ExtrapolateWhenEmpty bool `yaml:"extrapolateWhenEmpty"`
 
 	Prompt string `yaml:"-"`
 
@@ -24,7 +24,7 @@ type Config struct {
 // DefaultConfig returns the default config.
 func DefaultConfig() *Config {
 	return &Config{
-		InterpolateWhenEmpty: true,
+		ExtrapolateWhenEmpty: true,
 
 		Prompt: DefaultPrompt,
 
