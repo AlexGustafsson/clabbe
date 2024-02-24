@@ -2,7 +2,7 @@ package openai
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -22,11 +22,11 @@ func TestFetchCompletion(t *testing.T) {
 		Messages: []Message{
 			{
 				Role:    RoleSystem,
-				Content: "Add the numbers provided by the user. Respond only with the sum, nothing else.",
+				Content: "Add the numbers delimited by spaces in pairs separated by commas. Respond only with the sum, one line per sum, nothing else.",
 			},
 			{
 				Role:    RoleUser,
-				Content: "1 2",
+				Content: "1 2, 3 4",
 			},
 		},
 		Temperature:      1,
@@ -39,7 +39,9 @@ func TestFetchCompletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	fmt.Printf("%+v\n", res)
+	encoder := json.NewEncoder(os.Stderr)
+	encoder.SetIndent("", "  ")
+	encoder.Encode(res)
 
-	assert.Equal(t, "3", res.Choices[0].Message.Content)
+	assert.Equal(t, "3\n7", res.Choices[0].Message.Content)
 }

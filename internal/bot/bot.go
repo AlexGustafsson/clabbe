@@ -247,11 +247,16 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 	response := res.Choices[0].Message.Content
 	slog.Debug("Got response from Open AI", slog.String("response", response))
 
+	if response == "no results" {
+		slog.Debug("No results from LLM")
+		return nil
+	}
+
 	// TODO: Assume default prompt for now
 	lines := strings.Split(response, "\n")
 	for _, line := range lines {
 		_, query, _ := strings.Cut(line, " ")
-		if _, err := b.Queue(ctx, query, &QueueOptions{Source: "ai"}); err != nil {
+		if _, err := b.Queue(ctx, strings.TrimSpace(query), &QueueOptions{Source: "ai"}); err != nil {
 			return err
 		}
 	}
