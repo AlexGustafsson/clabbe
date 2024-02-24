@@ -273,7 +273,9 @@ func (b *Bot) Play(opus chan<- []byte) error {
 
 	b.shouldPlay = true
 
-	for {
+	failures := 0
+
+	for failures < 5 {
 		b.mutex.Lock()
 		entry, ok := b.playlist.Pop()
 		b.mutex.Unlock()
@@ -292,10 +294,17 @@ func (b *Bot) Play(opus chan<- []byte) error {
 			}
 		}
 
-		if err := b.playOnce(entry, opus); err != nil {
-			return err
+		err := b.playOnce(entry, opus)
+		if err == nil {
+			failures = 0
+		} else {
+			slog.Error("Failed to play entry", slog.Any("error", err))
+			// Try next
+			failures++
 		}
 	}
+
+	return fmt.Errorf("too many errors")
 }
 
 // playOnce plays the entry, sending windows of OPUS-encoded audio to the
