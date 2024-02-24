@@ -153,11 +153,11 @@ type SuggestOptions struct {
 }
 
 // Suggest adds the results as a basis for songs to play when interpolating.
-func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) error {
+func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) ([]youtube.SearchResult, error) {
 	slog.Debug("Got suggestion", slog.String("query", query))
 	results, err := b.Search(ctx, query, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	slog.Debug("Got results", slog.Any("results", results))
@@ -173,7 +173,7 @@ func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) e
 	}
 	b.mutex.Unlock()
 
-	return nil
+	return results, nil
 }
 
 // Extrapolate adds some entries to the playlist based on suggestions and

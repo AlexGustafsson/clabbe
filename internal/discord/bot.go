@@ -234,6 +234,10 @@ func (c *Conn) handleQueueCommand(ctx context.Context, session *discordgo.Sessio
 		return c.updateResponse(session, event, "I can't do that right now. Try again in a little while.")
 	}
 
+	if len(results) == 0 {
+		return c.updateResponse(session, event, "I couldn't find anything for you.")
+	}
+
 	c.connectBot(guildID, voiceChannelID)
 
 	return c.updateResponse(session, event, fmt.Sprintf("Queued %d songs", len(results)))
@@ -255,9 +259,14 @@ func (c *Conn) handleSuggestCommand(ctx context.Context, session *discordgo.Sess
 		ID:   fmt.Sprintf("%s/%s", guildID, event.Member.User.ID),
 		Name: event.Member.User.Username,
 	}
-	if err := c.bot.Suggest(ctx, entity, query); err != nil {
+	results, err := c.bot.Suggest(ctx, entity, query)
+	if err != nil {
 		slog.Error("Failed to suggest songs", slog.Any("error", err))
 		return c.updateResponse(session, event, "I can't do that right now. Try again in a little while.")
+	}
+
+	if len(results) == 0 {
+		return c.updateResponse(session, event, "I couldn't find anything for you.")
 	}
 
 	c.connectBot(guildID, voiceChannelID)
