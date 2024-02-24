@@ -1,5 +1,7 @@
 # Clabbe
 
+![Banner containg usage examples](.github/banner.png)
+
 A personal DJ that can be used locally or as a Discord bot. Uses AI to queue new
 songs based on suggestions and recently played songs. Songs are fetched from
 YouTube.
