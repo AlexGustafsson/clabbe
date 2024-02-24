@@ -13,9 +13,10 @@ import (
 var _ (streaming.AudioStream) = (*AudioStream)(nil)
 
 type AudioStream struct {
-	title  string
-	reader io.ReadCloser
-	size   int64
+	title    string
+	reader   io.ReadCloser
+	size     int64
+	mimeType string
 }
 
 // Close implements streaming.AudioStream.
@@ -36,6 +37,11 @@ func (s *AudioStream) Size() int64 {
 // Title implements streaming.AudioStream.
 func (s *AudioStream) Title() string {
 	return s.title
+}
+
+// MimeType implements streaming.AudioStream.
+func (s *AudioStream) MimeType() string {
+	return s.mimeType
 }
 
 type StreamOptions struct {
@@ -85,15 +91,18 @@ func NewAudioStream(ctx context.Context, id string, options *StreamOptions) (*Au
 		return sortFunc(i, j, formats)
 	})
 
+	format := formats[0]
+
 	slog.Debug("Retrieving audio stream")
-	reader, size, err := client.GetStreamContext(ctx, video, &formats[0])
+	reader, size, err := client.GetStreamContext(ctx, video, &format)
 	if err != nil {
 		return nil, err
 	}
 
 	return &AudioStream{
-		title:  video.Title,
-		reader: reader,
-		size:   size,
+		title:    video.Title,
+		reader:   reader,
+		size:     size,
+		mimeType: format.MimeType,
 	}, nil
 }
