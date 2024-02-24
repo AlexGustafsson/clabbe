@@ -327,6 +327,9 @@ func (b *Bot) playOnce(entry PlaylistEntry, opus chan<- []byte) error {
 		if err == io.EOF {
 			slog.Debug("Stream ended")
 			break
+		} else if err == io.ErrClosedPipe {
+			slog.Debug("Stream closed")
+			break
 		} else if err != nil {
 			slog.Error("Failed to read webm OPUS frame", slog.Any("error", err))
 			return err
