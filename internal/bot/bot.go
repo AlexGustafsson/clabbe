@@ -245,12 +245,12 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 	}
 
 	response := res.Choices[0].Message.Content
-	slog.Debug("Got response from Open AI", slog.String("response", response))
-
 	if response == "no results" {
 		slog.Debug("No results from LLM")
 		return nil
 	}
+
+	slog.Debug("Got response from Open AI", slog.String("response", response))
 
 	// TODO: Assume default prompt for now
 	lines := strings.Split(response, "\n")
@@ -266,7 +266,7 @@ func (b *Bot) Interpolate(ctx context.Context) error {
 
 // Play starts playing content, sending windows of OPUS-encoded audio to the
 // provided channel.
-func (b *Bot) Play(opus chan<- []byte) error {
+func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 	if b.currentStream != nil {
 		return fmt.Errorf("already playing")
 	}
@@ -294,6 +294,7 @@ func (b *Bot) Play(opus chan<- []byte) error {
 			}
 		}
 
+		songs <- entry.Title
 		err := b.playOnce(entry, opus)
 		if err == nil {
 			failures = 0
