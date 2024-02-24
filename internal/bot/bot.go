@@ -66,13 +66,16 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 			Model:            openai.DefaultModel,
 			Stream:           false,
 		})
-
 		if err != nil {
 			return nil, err
 		}
 
 		if len(res.Choices) > 0 {
 			response := res.Choices[0].Message.Content
+			if response == "no results" {
+				slog.Debug("No results from LLM")
+				return []youtube.SearchResult{}, nil
+			}
 			slog.Debug("Got response from Open AI", slog.String("response", response))
 
 			// TODO: Assume default prompt for now
@@ -84,7 +87,8 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 			}
 		}
 	} else {
-		queries = append(queries, query)
+		slog.Debug("No response from LLM")
+		return []youtube.SearchResult{}, nil
 	}
 
 	slog.Debug("Searching for results on YouTube", slog.Any("queries", queries))
@@ -239,7 +243,6 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 		slog.Debug("No results from LLM")
 		return nil
 	}
-
 	slog.Debug("Got response from Open AI", slog.String("response", response))
 
 	// TODO: Assume default prompt for now
