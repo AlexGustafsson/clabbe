@@ -28,6 +28,7 @@ type Bot struct {
 
 	mutex         sync.Mutex
 	shouldPlay    bool
+	currentEntry  *state.PlaylistEntry
 	currentStream streaming.AudioStream
 }
 
@@ -119,7 +120,7 @@ type QueueOptions struct {
 }
 
 // Queue performs a search for content and adds the top result to the playlist.
-func (b *Bot) Queue(ctx context.Context, query string, addedBy state.Entity, options *QueueOptions) ([]youtube.SearchResult, error) {
+func (b *Bot) Queue(ctx context.Context, query string, addedBy state.Entity, options *QueueOptions) ([]state.PlaylistEntry, error) {
 	slog.Debug("Queueing", slog.String("query", query))
 	if options == nil {
 		options = &QueueOptions{}
@@ -132,24 +133,28 @@ func (b *Bot) Queue(ctx context.Context, query string, addedBy state.Entity, opt
 		return nil, err
 	}
 
+	entries := make([]state.PlaylistEntry, len(results))
+
 	if len(results) > 0 {
 		slog.Debug("Got results to queue", slog.Any("results", results))
 		b.mutex.Lock()
-		for _, result := range results {
-			b.state.Queue.AddEntry(state.PlaylistEntry{
+		for i, result := range results {
+			entry := state.PlaylistEntry{
 				Time:    time.Now(),
 				Title:   result.Title,
 				AddedBy: addedBy,
 				Source:  state.SourceYouTube,
 				URI:     result.ID,
-			})
+			}
+			entries[i] = entry
+			b.state.Queue.AddEntry(entry)
 		}
 		b.mutex.Unlock()
 	} else {
 		slog.Debug("No results")
 	}
 
-	return results, nil
+	return entries, nil
 }
 
 type SuggestOptions struct {
@@ -158,27 +163,31 @@ type SuggestOptions struct {
 }
 
 // Suggest adds the results as a basis for songs to play when interpolating.
-func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) ([]youtube.SearchResult, error) {
+func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) ([]state.PlaylistEntry, error) {
 	slog.Debug("Adding suggestions", slog.String("query", query))
 	results, err := b.Search(ctx, query, true)
 	if err != nil {
 		return nil, err
 	}
 
+	entries := make([]state.PlaylistEntry, len(results))
+
 	slog.Debug("Got results to add to suggestions", slog.Any("results", results))
 	b.mutex.Lock()
-	for _, result := range results {
-		b.state.Suggestions.AddEntry(state.PlaylistEntry{
+	for i, result := range results {
+		entry := state.PlaylistEntry{
 			Time:    time.Now(),
 			Title:   result.Title,
 			AddedBy: addedBy,
 			Source:  state.SourceYouTube,
 			URI:     result.ID,
-		})
+		}
+		entries[i] = entry
+		b.state.Suggestions.AddEntry(entry)
 	}
 	b.mutex.Unlock()
 
-	return results, nil
+	return entries, nil
 }
 
 // Extrapolate adds some entries to the playlist based on suggestions and
@@ -317,6 +326,7 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	slog.Debug("Playing", slog.String("uri", entry.URI), slog.String("title", entry.Title), slog.String("source", string(entry.Source)))
 	defer func() {
+		b.currentEntry = nil
 		b.currentStream = nil
 	}()
 
@@ -338,6 +348,7 @@ func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 
 	webmReader := webm.NewReader(stream)
 
+	b.currentEntry = &entry
 	b.currentStream = stream
 	b.state.History.AddEntry(entry)
 	b.mutex.Unlock()
@@ -413,8 +424,9 @@ func (b *Bot) Skip() {
 	}
 }
 
-func (b *Bot) IsPlaying() bool {
-	return b.currentStream != nil
+// NowPlaying returns the current playlist entry, or nil if nothing is playing.
+func (b *Bot) NowPlaying() *state.PlaylistEntry {
+	return b.currentEntry
 }
 
 func (b *Bot) OpenAIEnabled() bool {

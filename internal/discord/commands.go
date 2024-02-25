@@ -1,12 +1,91 @@
 package discord
 
 import (
-	"context"
-
-	"github.com/bwmarrin/discordgo"
+	"github.com/AlexGustafsson/clabbe/internal/bot"
+	"github.com/AlexGustafsson/clabbe/internal/state"
 )
 
+// Command exposes functionality as a Discord command.
 type Command struct {
-	*discordgo.ApplicationCommand
-	Handler func(context.Context, *discordgo.Session, *discordgo.InteractionCreate) error
+	Name        string
+	Description string
+	Options     []Option
+	// Action is the function to invoke whenever the command is invoked.
+	// The action returns the response as a string, or an error if an unexpected
+	// failure occurs.
+	Action func(*Context, *Conn) (string, error)
+	// EnabledFunc returns true if the command is enabled.
+	// A nil EnabledFunc implicitly enables the command.
+	EnabledFunc func(*state.State, *bot.Bot) bool
+}
+
+// Option defines an option to a command.
+type Option struct {
+	Name        string
+	Description string
+	Required    bool
+}
+
+// commands holds all available commands.
+var commands = []Command{
+	{
+		Name:        "play",
+		Description: "Start playing music in your voice channel",
+		Action:      PlayAction,
+	},
+	{
+		Name:        "queue",
+		Description: "Queue music to your voice channel",
+		Action:      QueueAction,
+		Options: []Option{
+			{
+				Name:        "query",
+				Description: "YouTube search query",
+				Required:    true,
+			},
+		},
+	},
+	{
+		Name:        "queued",
+		Description: "Print queue",
+		Action:      QueuedAction,
+	},
+	{
+		Name:        "suggest",
+		Description: "Suggest music to your voice channel",
+		Action:      SuggestAction,
+		Options: []Option{
+			{
+				Name:        "query",
+				Description: "LLM search query",
+				Required:    true,
+			},
+		},
+		EnabledFunc: func(s *state.State, b *bot.Bot) bool {
+			return b.OpenAIEnabled()
+		},
+	},
+	{
+		Name:        "suggestions",
+		Description: "Print suggestions",
+		Action:      SuggestionsAction,
+		EnabledFunc: func(s *state.State, b *bot.Bot) bool {
+			return b.OpenAIEnabled()
+		},
+	},
+	{
+		Name:        "recent",
+		Description: "Print recently played songs",
+		Action:      RecentAction,
+	},
+	{
+		Name:        "stop",
+		Description: "Disconnect the bot",
+		Action:      StopAction,
+	},
+	{
+		Name:        "skip",
+		Description: "Skip the current song",
+		Action:      SkipAction,
+	},
 }

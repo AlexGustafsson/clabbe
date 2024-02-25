@@ -58,9 +58,9 @@ examples that typically work well:
 
 This command requires you to be in a voice channel.
 
-#### `/playlist`
+#### `/queued`
 
-The playlist command prints the current playlist.
+The queued command prints the list of queued songs.
 
 #### `/suggestions` (AI)
 
@@ -123,6 +123,9 @@ The code base consists of the following notable parts:
 
 - `internal/bot` - a platform agnostic bot. Exposes core bot functionality.
 - `internal/discord` - a Discord adapter for the bot.
+  - `internal/discord/conn.go` - A connection abstraction.
+  - `internal/discord/commands.go` - Available command definitions.
+  - `internal/discord/actions.go` - Actions called when invoking commands.
 - `internal/ebml`, `internal/webm` - a webm demuxer in order to stream opus
   samples immediately from a source to Discord.
 - `internal/ffmpeg` - an ffmpeg abstraction to play audio using ffplay.
