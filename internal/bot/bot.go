@@ -415,11 +415,20 @@ func (b *Bot) Stop() {
 
 // Skip stops the currently playing stream.
 func (b *Bot) Skip() {
-	slog.Debug("Skipping playing stream")
+	b.SkipN(0)
+}
+
+// SkipN skips n songs.
+func (b *Bot) SkipN(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	slog.Debug("Skipping playing stream(s)", slog.Int("n", n))
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	if b.currentStream != nil {
+		b.state.Queue.PopN(n - 1)
 		b.currentStream.Close()
 	}
 }

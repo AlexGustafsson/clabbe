@@ -70,9 +70,10 @@ The suggestions command prints the current suggestions.
 
 The recent command prints recently played songs.
 
-#### `/skip`
+#### `/skip [n]`
 
-The skip command skips the currently playing song.
+The skip command skips the currently playing song. If `n` is specified, the bot
+will skip the specified number of songs.
 
 #### `/stop`
 

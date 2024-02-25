@@ -23,8 +23,26 @@ type Command struct {
 type Option struct {
 	Name        string
 	Description string
-	Required    bool
+	// Type defaults to string.
+	Type     OptionType
+	Required bool
 }
+
+type OptionType int
+
+const (
+	OptionTypeString = iota << 1
+	OptionTypeNumber
+)
+
+// TODO:
+// /queue add xxx
+// /queue print
+// /queue clear
+// /suggestions add xxx
+// /suggestions print
+// /suggestions clear
+// /recent print
 
 // commands holds all available commands.
 var commands = []Command{
@@ -87,5 +105,12 @@ var commands = []Command{
 		Name:        "skip",
 		Description: "Skip the current song",
 		Action:      SkipAction,
+		Options: []Option{
+			{
+				Name:        "n",
+				Description: "Number of songs to skip",
+				Type:        OptionTypeNumber,
+			},
+		},
 	},
 }

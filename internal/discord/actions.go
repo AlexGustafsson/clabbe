@@ -127,6 +127,7 @@ func StopAction(ctx *Context, conn *Conn) (string, error) {
 }
 
 func SkipAction(ctx *Context, conn *Conn) (string, error) {
-	conn.Bot().Skip()
-	return "Skipped song", nil
+	n, _ := ctx.Number("n")
+	conn.Bot().SkipN(int(n))
+	return "Skipping", nil
 }

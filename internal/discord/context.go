@@ -69,6 +69,24 @@ func (c *Context) String(key string) (string, bool) {
 	return value, true
 }
 
+// Number returns a number parameter by key.
+func (c *Context) Number(key string) (float64, bool) {
+	options := c.event.ApplicationCommandData().Options
+
+	value := float64(0)
+	for _, option := range options {
+		if option.Name == key {
+			value = option.FloatValue()
+		}
+	}
+
+	if value == 0 {
+		return 0, false
+	}
+
+	return value, true
+}
+
 // Entity returns the entity that invoked the command.
 func (c *Context) Entity() state.Entity {
 	name := c.event.Member.Nick
