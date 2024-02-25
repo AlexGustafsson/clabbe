@@ -44,7 +44,7 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	}
 
 	slog.Debug("Registering commands")
-	// TODO: Do we need to remove the commands when we leave?
+
 	for _, command := range commands {
 		options := make([]*discordgo.ApplicationCommandOption, len(command.Options))
 		for i, o := range command.Options {
@@ -66,6 +66,22 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 			return nil, err
 		}
 		conn.commands[command.Name] = command
+	}
+
+	slog.Debug("Trying to clean up old commands, if any")
+	commands, err := conn.discord.ApplicationCommands(conn.discord.State.Application.ID, "")
+	if err == nil {
+		for _, command := range commands {
+			if _, ok := conn.commands[command.Name]; !ok {
+				slog.Debug("Removing command", slog.String("name", command.Name), slog.String("id", command.ID))
+				err := conn.discord.ApplicationCommandDelete(command.ApplicationID, "", command.ID)
+				if err != nil {
+					slog.Warn("Failed to delete application command - ignoring cleaning of this command", slog.String("name", command.Name), slog.String("id", command.ID))
+				}
+			}
+		}
+	} else {
+		slog.Warn("Failed to get application commands - skipping clean of old commands")
 	}
 
 	// Add a handler for all command interactions. The
