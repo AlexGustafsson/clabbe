@@ -352,7 +352,9 @@ func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 		}()
 		c.isConnected = true
 
-		channel.LogLevel = discordgo.LogDebug
+		if c.state.Config.LogLevel == slog.LevelDebug {
+			channel.LogLevel = discordgo.LogDebug
+		}
 
 		time.Sleep(250 * time.Millisecond)
 
