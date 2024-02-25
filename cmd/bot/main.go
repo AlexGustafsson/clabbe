@@ -60,6 +60,7 @@ func run(ctx context.Context, state *state.State) error {
 			Handler: mux,
 		}
 
+		// Serve the API
 		go func() {
 			err := server.Serve(listener)
 			if err != nil && err != http.ErrServerClosed {
@@ -67,12 +68,14 @@ func run(ctx context.Context, state *state.State) error {
 			}
 		}()
 
+		// Close the server gracefully on shutdown
 		go func() {
 			<-ctx.Done()
 			server.Close()
 		}()
 	}
 
+	// Connect to Discord
 	var err error
 	conn, err = discord.Dial(state, bot)
 	if err != nil {
@@ -80,6 +83,7 @@ func run(ctx context.Context, state *state.State) error {
 		return err
 	}
 
+	// Wait for the program to be stopped before gracefully exiting
 	<-ctx.Done()
 	bot.Stop()
 	conn.Close()
