@@ -204,7 +204,7 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	}
 
 	var lookback strings.Builder
-	entries := b.state.History.PeakBackN(10)
+	entries := b.state.History.PeakBackN(b.state.Config.ExtrapolationLookback)
 	for i, entry := range entries {
 		fmt.Fprintf(&lookback, "%d. %s\n", i+1, entry.Title)
 	}
