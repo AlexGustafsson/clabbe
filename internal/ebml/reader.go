@@ -7,15 +7,19 @@ import (
 )
 
 type ElementHeader struct {
-	Tag      uint64
+	// Tag is the unique VINT-encoded tag of the element.
+	Tag uint64
+	// DataSize defines how many bytes of data the element contains.
 	DataSize uint64
 }
 
+// Reader reads EBML elements.
 type Reader struct {
 	reader        io.Reader
 	elementReader io.Reader
 }
 
+// NewReader creates a new Reader that will read from reader.
 func NewReader(reader io.Reader) *Reader {
 	return &Reader{
 		reader: reader,
