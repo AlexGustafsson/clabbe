@@ -3,12 +3,14 @@ package state
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
+
+	"github.com/AlexGustafsson/clabbe/internal/timeutil"
 )
 
 type Role string
@@ -185,26 +187,64 @@ func (p *Playlist) PopN(n int) []PlaylistEntry {
 	return entries
 }
 
-// PeakN returns at most n entries from the front of the playlist.
-func (p *Playlist) PeakN(n int) []PlaylistEntry {
+// PeakBackN returns at most n entries from the back of the playlist.
+func (p *Playlist) PeakBackN(n int) []PlaylistEntry {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	entries := make([]PlaylistEntry, 0)
 	for i := 0; i < n && i < len(p.entries); i++ {
-		entries = append(entries, p.entries[i])
+		entries = append(entries, p.entries[len(p.entries)-1-i])
 	}
 
 	return entries
 }
 
-// String formats the playlist's entry.
-func (p *Playlist) String() string {
-	var builder strings.Builder
-	for i, entry := range p.entries {
-		fmt.Fprintf(&builder, "%d. %s\n", i, entry.Title)
+// Format formats the first n entries of the playlist using the specified format
+// template.
+//
+// The template has the following values exposed:
+//
+//   - Index: index of the entry
+//   - EntityName: name of the entity that added the entry
+//   - Title: title of the entry
+//   - RelativeTime: duration since the entry was added
+func (p *Playlist) Format(format string, n int, reversed bool) (string, error) {
+	t, err := template.New("").Parse(format)
+	if err != nil {
+		return "", err
 	}
-	return builder.String()
+
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	var builder strings.Builder
+
+	for i := 0; i < n && i < len(p.entries); i++ {
+		entry := p.entries[i]
+		if reversed {
+			entry = p.entries[len(p.entries)-1-i]
+		}
+
+		entityName := entry.AddedBy.Name
+		if entityName == "" && entry.AddedBy.Role == RoleSystem {
+			entityName = "bot"
+		} else if entityName == "" {
+			entityName = "user"
+		}
+
+		err := t.Execute(&builder, map[string]any{
+			"Index":        i + 1,
+			"EntityName":   entityName,
+			"Title":        entry.Title,
+			"RelativeTime": timeutil.FormatRelativeDuration(-time.Since(entry.Time)),
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return builder.String(), nil
 }
 
 // Clear clears the playlist.

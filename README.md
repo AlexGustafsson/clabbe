@@ -62,6 +62,10 @@ The playlist command prints the current playlist.
 
 The suggestions command prints the current suggestions.
 
+#### `/recent`
+
+The recent command prints recently played songs.
+
 #### `/skip`
 
 The skip command skips the currently playing song.

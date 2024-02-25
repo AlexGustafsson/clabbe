@@ -65,6 +65,12 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 				Description: "Print playlist",
 			},
 		},
+		"recent": {
+			Handler: conn.handlePlaylistCommand,
+			ApplicationCommand: &discordgo.ApplicationCommand{
+				Description: "Print recent history",
+			},
+		},
 		"stop": {
 			Handler: conn.handleStopCommand,
 			ApplicationCommand: &discordgo.ApplicationCommand{
@@ -223,10 +229,14 @@ func (c *Conn) handleQueueCommand(ctx context.Context, session *discordgo.Sessio
 		return err
 	}
 
+	name := event.Member.Nick
+	if name == "" {
+		name = event.Member.User.Username
+	}
 	entity := state.Entity{
 		Role: state.RoleUser,
 		ID:   fmt.Sprintf("%s/%s", guildID, event.Member.User.ID),
-		Name: event.Member.User.Username,
+		Name: name,
 	}
 	results, err := c.bot.Queue(ctx, query, entity, nil)
 	if err != nil {
@@ -254,10 +264,14 @@ func (c *Conn) handleSuggestCommand(ctx context.Context, session *discordgo.Sess
 		return err
 	}
 
+	name := event.Member.Nick
+	if name == "" {
+		name = event.Member.User.Username
+	}
 	entity := state.Entity{
 		Role: state.RoleUser,
 		ID:   fmt.Sprintf("%s/%s", guildID, event.Member.User.ID),
-		Name: event.Member.User.Username,
+		Name: name,
 	}
 	results, err := c.bot.Suggest(ctx, entity, query)
 	if err != nil {
@@ -286,17 +300,28 @@ func (c *Conn) handleStopCommand(ctx context.Context, session *discordgo.Session
 
 func (c *Conn) handlePlaylistCommand(ctx context.Context, session *discordgo.Session, event *discordgo.InteractionCreate) error {
 	var playlist *state.Playlist
+	reverse := false
+	format := ""
 	if event.ApplicationCommandData().Name == "playlist" {
 		playlist = c.state.Queue
+		format = "{{.Index}}. {{.EntityName}} queued {{.RelativeTime}} - **{{.Title}}**\n"
 	} else if event.ApplicationCommandData().Name == "suggestions" {
 		playlist = c.state.Suggestions
+		format = "{{.Index}}. **{{.Title}}**\n"
+	} else if event.ApplicationCommandData().Name == "recent" {
+		playlist = c.state.History
+		reverse = true
+		format = "{{.Index}}. {{.EntityName}} played {{.RelativeTime}} - **{{.Title}}**\n"
 	} else {
 		panic("discord: unexpected command")
 	}
 
-	contents := playlist.String()
+	contents, err := playlist.Format(format, 20, reverse)
+	if err != nil {
+		return err
+	}
 	if contents == "" {
-		contents = "No songs are queued"
+		contents = "No songs"
 	}
 
 	return c.updateResponse(session, event, contents)

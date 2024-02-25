@@ -85,7 +85,6 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 				_, query, _ := strings.Cut(entry, " ")
 				queries = append(queries, query)
 			}
-		}
 		} else {
 			slog.Debug("No response from LLM")
 			return []youtube.SearchResult{}, nil
@@ -189,6 +188,9 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	if len(suggestions) > 0 {
 		slog.Debug("There were unused suggestions, use them first")
 		for _, suggestion := range suggestions {
+			suggestion.AddedBy = state.Entity{
+				Role: state.RoleSystem,
+			}
 			b.state.Queue.Push(suggestion)
 		}
 		b.mutex.Unlock()
@@ -202,9 +204,9 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	}
 
 	var lookback strings.Builder
-	entries := b.state.History.PeakN(10)
+	entries := b.state.History.PeakBackN(10)
 	for i, entry := range entries {
-		fmt.Fprintf(&lookback, "%d: %s", i+1, entry.Title)
+		fmt.Fprintf(&lookback, "%d. %s\n", i+1, entry.Title)
 	}
 	b.mutex.Unlock()
 
