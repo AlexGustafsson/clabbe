@@ -8,11 +8,13 @@ import (
 	"net/http"
 )
 
+// Client performs requests towards OpenAI's APIs.
 type Client struct {
 	client *http.Client
 	apiKey string
 }
 
+// NewClient returns a new Client using the specified API key.
 func NewClient(apiKey string) *Client {
 	return &Client{
 		client: &http.Client{},
@@ -20,6 +22,7 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
+// CompletionRequest defines a request using OpenAI's completion API.
 type CompletionRequest struct {
 	// Messages contains messages / conversation history to use for completion.
 	Messages []Message `json:"messages"`
@@ -47,41 +50,54 @@ type CompletionRequest struct {
 
 const DefaultModel string = "gpt-3.5-turbo-0125"
 
+// Role defines the role of the current context.
 type Role string
 
 const (
-	RoleSystem    Role = "system"
+	// RoleSystem specifies that the message is from the system iteself.
+	RoleSystem Role = "system"
+	// RoleAssistant specifies that the message is from the assistant / LLM.
 	RoleAssistant Role = "assistant"
-	RoleUser      Role = "user"
+	// RoleUser specifies that the message is from an end-user.
+	RoleUser Role = "user"
 )
 
+// Message is a message sent to or received from an LLM.
 type Message struct {
-	Role    Role   `json:"role"`
+	Role Role `json:"role"`
+	// Content holds the message's contents.
 	Content string `json:"content"`
 }
 
+// CompletionResponse defines the response for a CompletionRequest.
 type CompletionResponse struct {
-	ID                string             `json:"id"`
-	Object            string             `json:"object"`
-	Created           int                `json:"created"`
-	Model             string             `json:"model"`
-	Choices           []CompletionChoice `json:"choices"`
-	Usage             CompletionUsage    `json:"usage"`
-	SystemFingerprint string             `json:"system_fingerprint"`
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int    `json:"created"`
+	Model   string `json:"model"`
+	// Choices holds possible choices for completions.
+	// Typically only one choice is provided.
+	Choices []CompletionChoice `json:"choices"`
+	// CompletionUsage holds information on token usage of a completion request.
+	Usage             CompletionUsage `json:"usage"`
+	SystemFingerprint string          `json:"system_fingerprint"`
 }
 
+// CompletionChoice defines one possible completion choice.
 type CompletionChoice struct {
 	Index        int     `json:"index"`
 	Message      Message `json:"message"`
 	FinishReason string  `json:"finish_reason"`
 }
 
+// CompletionUsage holds information on token usage of a completion request.
 type CompletionUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 }
 
+// FetchCompletion performs a completion request.
 func (c *Client) FetchCompletion(ctx context.Context, request *CompletionRequest) (*CompletionResponse, error) {
 	if request.Stream {
 		return nil, fmt.Errorf("stream mode is unsupported")
