@@ -28,8 +28,6 @@ The Clabbe bot exposes [slash commands](https://discord.com/blog/welcome-to-the-
 in the Discord server it is invited to. These commands can be used to queue and
 suggest music.
 
-All commands require you to be in a voice channel.
-
 #### `/queue <query>`
 
 The queue command will search for a video on YouTube using the specified query.
@@ -39,6 +37,8 @@ If AI support is enabled and the extrapolate option enabled (default), the bot
 will fill the queue on its own once it's empty. It will do this by prioritizing
 songs it has added when receiving suggestions (see /suggest). If no suggestions
 have been added, it will try to play songs similar to recent listening history.
+
+This command requires you to be in a voice channel.
 
 #### `/suggest <query>` (AI)
 
@@ -55,6 +55,8 @@ examples that typically work well:
 - 90s music quiz
 - famous cover songs
 - rock & roll duets
+
+This command requires you to be in a voice channel.
 
 #### `/playlist`
 
@@ -81,6 +83,8 @@ the /play command. Stopping the bot does not affect the queue or suggestions.
 
 The play command connects the bot to the voice channel you're in and requests it
 to start playing songs from the queue.
+
+This command requires you to be in a voice channel.
 
 ## Running
 
