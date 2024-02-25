@@ -62,9 +62,10 @@ func run(ctx context.Context, state *state.State) error {
 
 		// Serve the API
 		go func() {
+			slog.Info("Serving metrics", slog.String("address", listener.Addr().String()))
 			err := server.Serve(listener)
 			if err != nil && err != http.ErrServerClosed {
-				slog.Error("Failed to run HTTP server")
+				slog.Error("Failed to run metrics HTTP server")
 			}
 		}()
 
@@ -76,6 +77,7 @@ func run(ctx context.Context, state *state.State) error {
 	}
 
 	// Connect to Discord
+	slog.Info("Connecting bot to Discord")
 	var err error
 	conn, err = discord.Dial(state, bot)
 	if err != nil {

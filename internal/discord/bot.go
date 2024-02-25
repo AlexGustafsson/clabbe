@@ -33,7 +33,6 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 
 	conn.discord.Identify.Intents = discordgo.IntentGuilds | discordgo.IntentGuildVoiceStates
 
-	slog.Debug("Connecting to Discord")
 	if err := conn.discord.Open(); err != nil {
 		return nil, err
 	}
@@ -123,6 +122,8 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	// Add a handler for command interactions
 	conn.discord.AddHandler(func(session *discordgo.Session, event *discordgo.InteractionCreate) {
 		commandName := event.ApplicationCommandData().Name
+		slog.Debug("Got command request", slog.String("name", commandName))
+
 		command, ok := commands[commandName]
 		if !ok {
 			slog.Warn("Got command interaction for unknown command", slog.String("name", commandName))
@@ -146,7 +147,6 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	})
 
 	slog.Info("Bot started")
-
 	return conn, nil
 }
 
@@ -337,6 +337,7 @@ func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 			return
 		}
 
+		slog.Debug("Connecting bot to voice channel", slog.String("guildId", guildID), slog.String("voiceChannelID", voiceChannelID))
 		channel, err := c.discord.ChannelVoiceJoin(guildID, voiceChannelID, false, true)
 		if err != nil {
 			slog.Error("Failed to join channel", slog.Any("error", err))
@@ -360,10 +361,11 @@ func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 
 		channel.Speaking(true)
 
+		// Continuously update the bot's presence to reflect the currently playing
+		// song
 		songs := make(chan string)
 		go func() {
 			for song := range songs {
-				slog.Debug("Adding presence")
 				err := c.discord.UpdateStatusComplex(discordgo.UpdateStatusData{
 					Activities: []*discordgo.Activity{
 						{
@@ -378,6 +380,7 @@ func (c *Conn) connectBot(guildID string, voiceChannelID string) {
 			}
 		}()
 
+		slog.Debug("Bot is connected to voice channel, starting to play")
 		if err = c.bot.Play(channel.OpusSend, songs); err != nil {
 			slog.Error("Failed to play", slog.Any("error", err))
 		}

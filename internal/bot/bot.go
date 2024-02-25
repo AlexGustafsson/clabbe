@@ -43,6 +43,7 @@ func New(state *state.State, openai *openai.Client) *Bot {
 // Returns the first result. When using AI, returns the first result for each
 // additional query provided by the AI.
 func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.SearchResult, error) {
+	slog.Debug("Performing search", slog.String("query", query), slog.Bool("useAi", useAI))
 	queries := make([]string, 0)
 
 	if useAI && b.openai != nil {
@@ -77,7 +78,7 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 				slog.Debug("No results from LLM")
 				return []youtube.SearchResult{}, nil
 			}
-			slog.Debug("Got response from Open AI", slog.String("response", response))
+			slog.Debug("Got response from AI", slog.String("response", response))
 
 			// TODO: Assume default prompt for now
 			entries := strings.Split(response, "\n")
@@ -119,7 +120,7 @@ type QueueOptions struct {
 
 // Queue performs a search for content and adds the top result to the playlist.
 func (b *Bot) Queue(ctx context.Context, query string, addedBy state.Entity, options *QueueOptions) ([]youtube.SearchResult, error) {
-	slog.Debug("Got request to queue songs", slog.String("query", query))
+	slog.Debug("Queueing", slog.String("query", query))
 	if options == nil {
 		options = &QueueOptions{}
 	}
@@ -132,7 +133,7 @@ func (b *Bot) Queue(ctx context.Context, query string, addedBy state.Entity, opt
 	}
 
 	if len(results) > 0 {
-		slog.Debug("Got results", slog.Any("results", results))
+		slog.Debug("Got results to queue", slog.Any("results", results))
 		b.mutex.Lock()
 		for _, result := range results {
 			b.state.Queue.AddEntry(state.PlaylistEntry{
@@ -158,13 +159,13 @@ type SuggestOptions struct {
 
 // Suggest adds the results as a basis for songs to play when interpolating.
 func (b *Bot) Suggest(ctx context.Context, addedBy state.Entity, query string) ([]youtube.SearchResult, error) {
-	slog.Debug("Got suggestion", slog.String("query", query))
+	slog.Debug("Adding suggestions", slog.String("query", query))
 	results, err := b.Search(ctx, query, true)
 	if err != nil {
 		return nil, err
 	}
 
-	slog.Debug("Got results", slog.Any("results", results))
+	slog.Debug("Got results to add to suggestions", slog.Any("results", results))
 	b.mutex.Lock()
 	for _, result := range results {
 		b.state.Suggestions.AddEntry(state.PlaylistEntry{
@@ -187,7 +188,7 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	b.mutex.Lock()
 	suggestions := b.state.Suggestions.PopN(5)
 	if len(suggestions) > 0 {
-		slog.Debug("There were unused suggestions, use them first")
+		slog.Debug("There were unused suggestions, using them first")
 		for _, suggestion := range suggestions {
 			suggestion.AddedBy = state.Entity{
 				Role: state.RoleSystem,
@@ -211,7 +212,7 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	}
 	b.mutex.Unlock()
 
-	slog.Debug("Completing based off of history", slog.String("history", lookback.String()))
+	slog.Debug("Extrapolating songs based on history", slog.String("history", lookback.String()))
 	res, err := b.openai.FetchCompletion(ctx, &openai.CompletionRequest{
 		Messages: []openai.Message{
 			{
@@ -235,7 +236,6 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 		Model:            openai.DefaultModel,
 		Stream:           false,
 	})
-
 	if err != nil {
 		return err
 	}
