@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +11,9 @@ import (
 
 	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
+	"github.com/AlexGustafsson/clabbe/internal/webm"
+	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
 func run(ctx context.Context, query string) error {
@@ -31,18 +35,46 @@ func run(ctx context.Context, query string) error {
 
 	go func() {
 		<-ctx.Done()
+		slog.Debug("Closing stream")
 		stream.Close()
 	}()
 
-	normalizedStream, err := ffmpeg.NewNormalizedAudioStream(stream)
+	slog.Debug("Initializing new player")
+	player, err := ffmpeg.NewPlayer()
 	if err != nil {
-		slog.Error("Failed to normalize stream", slog.Any("error", err))
+		slog.Error("Failed to initialize player", slog.Any("error", err))
 		return err
 	}
 
-	if err := ffmpeg.Play(normalizedStream); err != nil {
-		slog.Error("Failed to play audio stream", slog.Any("error", err))
+	// As plain OPUS has very little support in players, mux it back to an ogg
+	// file
+	ogg, err := oggwriter.NewWith(player, 44000, 2)
+	if err != nil {
+		slog.Error("Failed to create OGG writer", slog.Any("error", err))
 		return err
+	}
+	defer ogg.Close()
+
+	reader := webm.NewReader(stream)
+	for {
+		frame, err := reader.Read()
+		if err == io.EOF {
+			slog.Debug("Stream ended")
+			break
+		} else if err == io.ErrClosedPipe {
+			slog.Debug("Stream closed")
+			break
+		} else if err != nil {
+			slog.Error("Failed to read webm OPUS frame", slog.Any("error", err))
+			return err
+		}
+
+		ogg.WriteRTP(&rtp.Packet{
+			Header: rtp.Header{
+				Timestamp: uint32(frame.Timecode),
+			},
+			Payload: frame.Payload,
+		})
 	}
 
 	return nil

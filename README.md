@@ -125,8 +125,8 @@ The code base consists of the following notable parts:
 - `internal/discord` - a Discord adapter for the bot.
 - `internal/ebml`, `internal/webm` - a webm demuxer in order to stream opus
   samples immediately from a source to Discord.
-  - `internal/ffmpeg` - an ffmpeg abstraction to process and normalize audio using
-  ffmpeg. Currently only used for development tools.
+- `internal/ffmpeg` - an ffmpeg abstraction to play audio using ffplay.
+  Currently only used for development tools.
 - `internal/openai` - an OpenAI API client.
 - `internal/state` - state management.
 - `internal/streaming`, `internal/streaming/youtube` - abstractions and
