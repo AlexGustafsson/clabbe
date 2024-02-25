@@ -86,9 +86,13 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 				queries = append(queries, query)
 			}
 		}
+		} else {
+			slog.Debug("No response from LLM")
+			return []youtube.SearchResult{}, nil
+		}
 	} else {
-		slog.Debug("No response from LLM")
-		return []youtube.SearchResult{}, nil
+		// Use query verbatim as use of AI was not requested
+		queries = []string{query}
 	}
 
 	slog.Debug("Searching for results on YouTube", slog.Any("queries", queries))
