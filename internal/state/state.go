@@ -17,6 +17,8 @@ type State struct {
 
 	historyPath string
 	History     *Playlist
+
+	Metrics *Metrics
 }
 
 // LoadOrInit loads the state from the specified base path.
@@ -78,6 +80,8 @@ func LoadOrInit(basePath string) (*State, error) {
 
 		historyPath: historyPath,
 		History:     history,
+
+		Metrics: NewMetrics(),
 	}, nil
 }
 

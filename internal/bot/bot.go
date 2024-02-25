@@ -69,6 +69,7 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 		if err != nil {
 			return nil, err
 		}
+		b.state.Metrics.TokensConsumed.Add(float64(res.Usage.TotalTokens))
 
 		if len(res.Choices) > 0 {
 			response := res.Choices[0].Message.Content
@@ -238,6 +239,7 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	b.state.Metrics.TokensConsumed.Add(float64(res.Usage.TotalTokens))
 
 	if len(res.Choices) == 0 {
 		slog.Debug("No response from LLM")
@@ -339,6 +341,14 @@ func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	b.currentStream = stream
 	b.state.History.AddEntry(entry)
 	b.mutex.Unlock()
+
+	b.state.Metrics.SongsPlayed.Inc()
+	b.state.Metrics.ActiveStreams.Inc()
+	playbackStarted := time.Now()
+	defer func() {
+		b.state.Metrics.DurationPlayed.Add(time.Since(playbackStarted).Seconds())
+		b.state.Metrics.ActiveStreams.Dec()
+	}()
 
 	for {
 		frame, err := webmReader.Read()

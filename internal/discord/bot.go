@@ -150,6 +150,10 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	return conn, nil
 }
 
+func (c *Conn) Ready() bool {
+	return c.discord.DataReady
+}
+
 func (c *Conn) Close() error {
 	return c.discord.Close()
 }

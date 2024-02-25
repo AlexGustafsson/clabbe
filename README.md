@@ -17,6 +17,8 @@ Clabbe is named after a Swedish DJ.
   RAM and up to one CPU core.
 - 🚀 Easy to setup. Zero-config other than bot token necessary for basic
   functionality
+- 🛰️ Prometheus metrics, liveliness and readiness probe support for maintainable
+  deployments using Docker or Kubernetes.
 
 ## Using
 

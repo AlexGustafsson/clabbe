@@ -17,9 +17,16 @@ type Config struct {
 	ExtrapolateWhenEmpty  bool `yaml:"extrapolateWhenEmpty"`
 	ExtrapolationLookback int  `yaml:"extrapolationLookback"`
 
+	Prometheus *PrometheusConfig `yaml:"prometheus,omitempty"`
+
 	Prompt string `yaml:"-"`
 
 	LogLevel slog.Level `yaml:"logLevel"`
+}
+
+type PrometheusConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Port    uint16 `yaml:"port"`
 }
 
 // DefaultConfig returns the default config.
@@ -27,6 +34,11 @@ func DefaultConfig() *Config {
 	return &Config{
 		ExtrapolateWhenEmpty:  true,
 		ExtrapolationLookback: 10,
+
+		Prometheus: &PrometheusConfig{
+			Enabled: false,
+			Port:    8080,
+		},
 
 		Prompt: DefaultPrompt,
 

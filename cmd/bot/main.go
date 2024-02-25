@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +16,8 @@ import (
 	"github.com/AlexGustafsson/clabbe/internal/discord"
 	"github.com/AlexGustafsson/clabbe/internal/openai"
 	"github.com/AlexGustafsson/clabbe/internal/state"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func run(ctx context.Context, state *state.State) error {
@@ -22,8 +27,54 @@ func run(ctx context.Context, state *state.State) error {
 	}
 
 	bot := bot.New(state, openAIClient)
+	var conn *discord.Conn
 
-	conn, err := discord.Dial(state, bot)
+	if state.Config.Prometheus.Enabled {
+		if err := prometheus.DefaultRegisterer.Register(state.Metrics); err != nil {
+			return err
+		}
+
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", state.Config.Prometheus.Port))
+		if err != nil {
+			return err
+		}
+
+		mux := http.NewServeMux()
+
+		mux.HandleFunc("/livez", func(w http.ResponseWriter, r *http.Request) {
+			// Default 200 OK
+		})
+
+		mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+			if conn == nil || !conn.Ready() {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+
+			// Default 200 OK
+		})
+
+		mux.Handle("/metrics", promhttp.Handler())
+
+		server := http.Server{
+			Handler: mux,
+		}
+
+		go func() {
+			err := server.Serve(listener)
+			if err != nil && err != http.ErrServerClosed {
+				slog.Error("Failed to run HTTP server")
+			}
+		}()
+
+		go func() {
+			<-ctx.Done()
+			server.Close()
+		}()
+	}
+
+	var err error
+	conn, err = discord.Dial(state, bot)
 	if err != nil {
 		slog.Error("Failed to start bot", slog.Any("error", err))
 		return err
