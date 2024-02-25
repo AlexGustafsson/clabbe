@@ -1,0 +1,33 @@
+##
+# Required
+
+# Token to use for connecting to Discord
+# Can also be set as an environment variable - DISCORD_BOT_TOKEN
+discordBotToken: ""
+
+##
+# AI
+
+# Open AI API key
+# Can also be set as an environment variable - OPENAI_API_KEY
+openAiApiKey: ""
+
+# Whether or not to fill the queue using AI whenever it runs dry
+extrapolateWhenEmpty: true
+
+# The number of songs to include when requesting more songs from the AI
+extrapolationLookback: 10
+
+##
+# Logs and metrics
+
+# The log level to log at. One of DEBUG, INFO, WARN, ERROR
+logLevel: INFO
+
+prometheus:
+  # Enable prometheus support
+  enabled: true
+
+  # HTTP port to listen on in order to serve /metrics, /livez and /readyz
+  # endpoints
+  port: 8080

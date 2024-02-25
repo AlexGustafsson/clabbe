@@ -88,7 +88,7 @@ to start playing songs from the queue.
 
 The bot needs a Discord bot token to run. The token can be specified in a config
 file or as an environment variable. The config, queues and history are stored in
-a configurable directory.
+a configurable directory specified when the bot is started.
 
 ```yaml
 discordBotToken: xxx
@@ -98,7 +98,9 @@ discordBotToken: xxx
 export DISCORD_BOT_TOKEN="xxx"
 ```
 
-The bot can then be started on the host or using Docker.
+See `config.yaml` for an example config file, with the default values set.
+
+The bot can be started on the host or using Docker.
 
 ```shell
 ./bot --config ./config
