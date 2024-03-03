@@ -55,36 +55,39 @@ func (c *Context) VoiceChannel() (string, string, error) {
 func (c *Context) String(key string) (string, bool) {
 	options := c.event.ApplicationCommandData().Options
 
-	value := ""
 	for _, option := range options {
 		if option.Name == key {
-			value = option.StringValue()
+			return option.StringValue(), true
 		}
 	}
 
-	if value == "" {
-		return "", false
-	}
-
-	return value, true
+	return "", false
 }
 
 // Number returns a number parameter by key.
 func (c *Context) Number(key string) (float64, bool) {
 	options := c.event.ApplicationCommandData().Options
 
-	value := float64(0)
 	for _, option := range options {
 		if option.Name == key {
-			value = option.FloatValue()
+			return option.FloatValue(), true
 		}
 	}
 
-	if value == 0 {
-		return 0, false
+	return 0, false
+}
+
+// Boolean returns a boolean parameter by key.
+func (c *Context) Boolean(key string) (bool, bool) {
+	options := c.event.ApplicationCommandData().Options
+
+	for _, option := range options {
+		if option.Name == key {
+			return option.BoolValue(), true
+		}
 	}
 
-	return value, true
+	return false, false
 }
 
 // Entity returns the entity that invoked the command.

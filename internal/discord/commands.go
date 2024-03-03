@@ -26,6 +26,9 @@ type Option struct {
 	// Type defaults to string.
 	Type     OptionType
 	Required bool
+	// EnabledFunc returns true if the option is enabled.
+	// A nil EnabledFunc implicitly enables the option.
+	EnableFunc func(*state.State, *bot.Bot) bool
 }
 
 type OptionType int
@@ -33,6 +36,7 @@ type OptionType int
 const (
 	OptionTypeString = iota << 1
 	OptionTypeNumber
+	OptionTypeBoolean
 )
 
 // TODO:
@@ -50,6 +54,16 @@ var commands = []Command{
 		Name:        "play",
 		Description: "Start playing music in your voice channel",
 		Action:      PlayAction,
+		Options: []Option{
+			{
+				Name:        "auto",
+				Description: "auto play using AI suggestions",
+				Type:        OptionTypeBoolean,
+				EnableFunc: func(s *state.State, b *bot.Bot) bool {
+					return b.OpenAIEnabled()
+				},
+			},
+		},
 	},
 	{
 		Name:        "queue",

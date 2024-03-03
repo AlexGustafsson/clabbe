@@ -48,9 +48,17 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	for _, command := range commands {
 		options := make([]*discordgo.ApplicationCommandOption, len(command.Options))
 		for i, o := range command.Options {
+			if o.EnableFunc != nil {
+				if !o.EnableFunc(state, bot) {
+					continue
+				}
+			}
+
 			t := discordgo.ApplicationCommandOptionString
 			if o.Type == OptionTypeNumber {
 				t = discordgo.ApplicationCommandOptionNumber
+			} else if o.Type == OptionTypeBoolean {
+				t = discordgo.ApplicationCommandOptionBoolean
 			}
 			options[i] = &discordgo.ApplicationCommandOption{
 				Name:        o.Name,

@@ -19,7 +19,8 @@ type Config struct {
 
 	Prometheus *PrometheusConfig `yaml:"prometheus,omitempty"`
 
-	Prompt string `yaml:"-"`
+	Prompt       string `yaml:"-"`
+	ThemesPrompt string `yaml:"-"`
 
 	LogLevel slog.Level `yaml:"logLevel"`
 }
@@ -40,7 +41,8 @@ func DefaultConfig() *Config {
 			Port:    8080,
 		},
 
-		Prompt: DefaultPrompt,
+		Prompt:       DefaultPrompt,
+		ThemesPrompt: GenerateThemesPrompt,
 
 		LogLevel: slog.LevelInfo,
 	}

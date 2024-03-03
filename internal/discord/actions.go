@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/AlexGustafsson/clabbe/internal/bot"
 )
 
 func PlayAction(ctx *Context, conn *Conn) (string, error) {
@@ -12,6 +14,12 @@ func PlayAction(ctx *Context, conn *Conn) (string, error) {
 		return "You must be in a voice channel to do that", nil
 	} else if err != nil {
 		return "", err
+	}
+
+	auto, ok := ctx.Boolean("auto")
+	if ok && auto {
+		b := conn.Bot()
+		b.ExtrapolationType = bot.ExtrapolationTypeSuggest
 	}
 
 	conn.Play(guildID, voiceChannelID)

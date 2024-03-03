@@ -21,7 +21,17 @@ var (
 	ErrNoStreamPlaying = errors.New("no stream is playing")
 )
 
+type ExtrapolationType int
+
+const (
+	ExtrapolationTypeNone ExtrapolationType = iota << 1
+	ExtrapolationTypeHistory
+	ExtrapolationTypeSuggest
+)
+
 type Bot struct {
+	ExtrapolationType ExtrapolationType
+
 	state *state.State
 
 	openai *openai.Client
@@ -33,7 +43,14 @@ type Bot struct {
 }
 
 func New(state *state.State, openai *openai.Client) *Bot {
+	extrapolationType := ExtrapolationTypeNone
+	if state.Config.ExtrapolateWhenEmpty {
+		extrapolationType = ExtrapolationTypeHistory
+	}
+
 	return &Bot{
+		ExtrapolationType: extrapolationType,
+
 		state: state,
 
 		openai: openai,
@@ -208,17 +225,65 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 		return nil
 	}
 
-	// If no suggestions were ready, extrapolate based on history
+	// If no suggestions were ready, extrapolate using AI
 	if b.openai == nil {
 		b.mutex.Unlock()
 		return fmt.Errorf("missing required Open AI client")
 	}
 
+	// If auto play is on, suggest themes to itself
+	if b.ExtrapolationType == ExtrapolationTypeSuggest {
+		b.mutex.Unlock()
+		return b.extrapolateWithThemeSuggestions(ctx)
+	} else {
+		return b.extrapolateWithHistory(ctx)
+	}
+}
+
+func (b *Bot) extrapolateWithThemeSuggestions(ctx context.Context) error {
+	slog.Debug("Extrapolating songs based on suggestions of new themes")
+	res, err := b.openai.FetchCompletion(ctx, NewThemeRequest())
+	if err != nil {
+		return err
+	}
+	b.state.Metrics.TokensConsumed.Add(float64(res.Usage.TotalTokens))
+
+	if len(res.Choices) == 0 {
+		slog.Debug("No response from LLM")
+		return nil
+	}
+
+	response := res.Choices[0].Message.Content
+	if response == "no results" {
+		slog.Debug("No results from LLM")
+		return nil
+	}
+	slog.Debug("Got response from Open AI", slog.String("response", response))
+
+	suggestions := strings.Split(response, "\n")
+	for _, suggestion := range suggestions {
+		entries, err := b.Suggest(ctx, state.Entity{Role: state.RoleSystem}, suggestion)
+		if err != nil {
+			return err
+		}
+
+		// For now, just use the first theme that returns results as the suggestion
+		// mechanism is shared with the users. Don't lock them out.
+		if len(entries) > 0 {
+			return b.Extrapolate(ctx)
+		}
+	}
+
+	return nil
+}
+
+func (b *Bot) extrapolateWithHistory(ctx context.Context) error {
 	var lookback strings.Builder
 	entries := b.state.History.PeakBackN(b.state.Config.ExtrapolationLookback)
 	for i, entry := range entries {
 		fmt.Fprintf(&lookback, "%d. %s\n", i+1, entry.Title)
 	}
+	// TODO: It's ugly to unlock here when it was locked elsewhere (Extrapolate)
 	b.mutex.Unlock()
 
 	slog.Debug("Extrapolating songs based on history", slog.String("history", lookback.String()))
@@ -410,6 +475,11 @@ func (b *Bot) Stop() {
 	// b.ClearSuggestions()
 	if b.currentStream != nil {
 		b.currentStream.Close()
+	}
+
+	b.ExtrapolationType = ExtrapolationTypeNone
+	if b.state.Config.ExtrapolateWhenEmpty {
+		b.ExtrapolationType = ExtrapolationTypeHistory
 	}
 }
 
