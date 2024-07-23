@@ -1,6 +1,6 @@
 module github.com/AlexGustafsson/clabbe
 
-go 1.21.7
+go 1.22
 
 require (
 	github.com/bwmarrin/discordgo v0.27.1

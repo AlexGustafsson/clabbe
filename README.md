@@ -138,7 +138,7 @@ The code base consists of the following notable parts:
 
 ### Building
 
-Clabbe is written in Go. To build on host, Go 1.21 or later is required.
+Clabbe is written in Go. To build on host, Go 1.22 or later is required.
 
 ```shell
 go build -o bot cmd/bot/main.go
