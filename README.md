@@ -149,3 +149,15 @@ It's also possible to build Clabbe using Docker.
 ```shell
 DOCKER_BUILDKIT=1 docker build --output=. .
 ```
+
+### Use of LLM
+
+The bot can use Open AI's APIs to take suggestions and to recommend more music.
+In order to be able to use music newer than what's "memorized" by the LLM and in
+order to promote playing new songs, the LLM receives a prompt containing the
+following parts.
+
+- Introduction / context
+- History
+- Similar songs
+- Query
