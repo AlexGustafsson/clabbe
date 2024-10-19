@@ -379,6 +379,10 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 			failures = 0
 		} else if errors.Is(err, ErrUnsupportedAudioCodec) {
 			slog.Error("Failed to play unsupported entry", slog.String("title", entry.Title))
+			// Skip to next
+			// TODO: Communicate the failure - write in chat (currently no way to send
+			// messages from the bot) or get the URL immediately on queue and complain
+			// then?
 		} else {
 			slog.Error("Failed to play entry", slog.Any("error", err))
 			// Try next
@@ -411,6 +415,7 @@ func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	if !strings.EqualFold(stream.MimeType(), `audio/webm; codecs="opus"`) {
 		// For now, don't support other formats as they would need to be processed
 		// by ffmpeg
+		b.mutex.Unlock()
 		return fmt.Errorf("%w: %s", ErrUnsupportedAudioCodec, stream.MimeType())
 	}
 
