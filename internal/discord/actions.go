@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/AlexGustafsson/clabbe/internal/bot"
+	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
 )
 
 func PlayAction(ctx *Context, conn *Conn) (string, error) {
@@ -46,9 +47,11 @@ func QueueAction(ctx *Context, conn *Conn) (string, error) {
 	}
 
 	entries, err := conn.Bot().Queue(ctx, query, ctx.Entity(), nil)
-	if err != nil {
+	if err == youtube.ErrTooManyRequests {
+		return "Too many requests made to YouTube. Try again in a short while", nil
+	} else if err != nil {
 		slog.Error("Failed to queue query results", slog.Any("error", err))
-		return "I can't do that right now. Try again in a little while", nil
+		return "I can't do that right now. Try again in a short while", nil
 	}
 
 	if len(entries) == 0 {
@@ -74,9 +77,11 @@ func SuggestAction(ctx *Context, conn *Conn) (string, error) {
 	}
 
 	entries, err := conn.Bot().Suggest(ctx, ctx.Entity(), query)
-	if err != nil {
+	if err == youtube.ErrTooManyRequests {
+		return "Too many requests made to YouTube. Try again in a short while", nil
+	} else if err != nil {
 		slog.Error("Failed to suggest results", slog.Any("error", err))
-		return "I can't do that right now. Try again in a little while", nil
+		return "I can't do that right now. Try again in a short while", nil
 	}
 
 	if len(entries) == 0 {

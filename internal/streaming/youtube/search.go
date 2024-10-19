@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,9 +13,14 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
 )
 
 var initialDataRegex = regexp.MustCompile(`var ytInitialData = (.*?)};`)
+
+var (
+	ErrTooManyRequests = errors.New("too many requests")
+)
 
 type SearchClient struct {
 	client *http.Client
@@ -22,7 +28,18 @@ type SearchClient struct {
 
 func NewSearchClient() *SearchClient {
 	return &SearchClient{
-		client: &http.Client{},
+		client: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// YouTube has started to redirect users to a /sorry page when some rate
+				// is reached. The URL causes the golang HTTP client to get stuck in a
+				// redirect loop. Catch this edge case
+				if req.URL.Hostname() == "www.google.com" && strings.HasPrefix(req.URL.Path, "/sorry") {
+					return ErrTooManyRequests
+				}
+
+				return nil
+			},
+		},
 	}
 }
 
@@ -56,7 +73,9 @@ func (c *SearchClient) Search(ctx context.Context, query string) ([]SearchResult
 		return nil, err
 	}
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode == http.StatusTooManyRequests {
+		return nil, ErrTooManyRequests
+	} else if res.StatusCode != http.StatusOK {
 		slog.Error("Failed to perform search", slog.String("status", res.Status))
 		return nil, fmt.Errorf("unexpected status: %s", res.Status)
 	}

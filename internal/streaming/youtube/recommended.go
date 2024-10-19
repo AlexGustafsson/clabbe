@@ -25,7 +25,18 @@ type RecommendClient struct {
 
 func NewRecommendClient() *RecommendClient {
 	return &RecommendClient{
-		client: &http.Client{},
+		client: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				// YouTube has started to redirect users to a /sorry page when some rate
+				// is reached. The URL causes the golang HTTP client to get stuck in a
+				// redirect loop. Catch this edge case
+				if req.URL.Hostname() == "www.google.com" && strings.HasPrefix(req.URL.Path, "/sorry") {
+					return ErrTooManyRequests
+				}
+
+				return nil
+			},
+		},
 	}
 }
 
@@ -61,7 +72,9 @@ func (c *RecommendClient) Recommend(ctx context.Context, id string) ([]Recommend
 		return nil, err
 	}
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode == http.StatusTooManyRequests {
+		return nil, ErrTooManyRequests
+	} else if res.StatusCode != http.StatusOK {
 		slog.Error("Failed to perform recommendation", slog.String("status", res.Status))
 		return nil, fmt.Errorf("unexpected status: %s", res.Status)
 	}
