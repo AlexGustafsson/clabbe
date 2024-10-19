@@ -18,7 +18,8 @@ import (
 )
 
 var (
-	ErrNoStreamPlaying = errors.New("no stream is playing")
+	ErrNoStreamPlaying       = errors.New("no stream is playing")
+	ErrUnsupportedAudioCodec = errors.New("unsupported audio codec")
 )
 
 type ExtrapolationType int
@@ -376,6 +377,8 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 		err := b.playOnce(entry, opus)
 		if err == nil {
 			failures = 0
+		} else if errors.Is(err, ErrUnsupportedAudioCodec) {
+			slog.Error("Failed to play unsupported entry", slog.String("title", entry.Title))
 		} else {
 			slog.Error("Failed to play entry", slog.Any("error", err))
 			// Try next
@@ -408,7 +411,7 @@ func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	if !strings.EqualFold(stream.MimeType(), `audio/webm; codecs="opus"`) {
 		// For now, don't support other formats as they would need to be processed
 		// by ffmpeg
-		return fmt.Errorf("unsupported codec: %s", stream.MimeType())
+		return fmt.Errorf("%w: %s", ErrUnsupportedAudioCodec, stream.MimeType())
 	}
 
 	webmReader := webm.NewReader(stream)
