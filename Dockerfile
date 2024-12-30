@@ -1,4 +1,4 @@
-FROM golang:1.23 as builder
+FROM --platform=${BUILDPLATFORM} golang:1.23 as builder
 
 WORKDIR /src
 
@@ -7,7 +7,9 @@ RUN go mod download && go mod verify
 
 COPY cmd cmd
 COPY internal internal
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-extldflags=-static -w -s' -o bot cmd/bot/main.go
+
+ARG TARGETARCH
+RUN GOARCH=${TARGETARCH} CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-extldflags=-static -w -s' -o bot cmd/bot/main.go
 
 FROM scratch
 
