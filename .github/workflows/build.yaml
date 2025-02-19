@@ -28,6 +28,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run tests
+        env:
+          # Use the toolchain specified in go.mod, or newer
+          GOTOOLCHAIN: auto
         run: go test -short -v ./...
 
   build-bot:
@@ -39,6 +42,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build bot
+        env:
+          # Use the toolchain specified in go.mod, or newer
+          GOTOOLCHAIN: auto
         run: go build -o bot cmd/bot/*.go
 
   build-ytplay:
@@ -50,4 +56,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build ytplay
+        env:
+          # Use the toolchain specified in go.mod, or newer
+          GOTOOLCHAIN: auto
         run: go build -o ytplay cmd/ytplay/*.go

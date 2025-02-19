@@ -1,6 +1,9 @@
-FROM --platform=${BUILDPLATFORM} golang:1.23 as builder
+FROM --platform=${BUILDPLATFORM} golang:1.24 as builder
 
 WORKDIR /src
+
+# Use the toolchain specified in go.mod, or newer
+ENV GOTOOLCHAIN=auto
 
 COPY go.mod go.sum .
 RUN go mod download && go mod verify
