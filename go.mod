@@ -7,7 +7,7 @@ require (
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/kkdai/youtube/v2 v2.10.3
 	github.com/pion/rtp v1.8.13
-	github.com/pion/webrtc/v4 v4.0.13
+	github.com/pion/webrtc/v4 v4.0.14
 	github.com/prometheus/client_golang v1.21.1
 	github.com/stretchr/testify v1.10.0
 	gopkg.in/yaml.v3 v3.0.1
