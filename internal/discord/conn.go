@@ -74,6 +74,7 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 			})
 		}
 
+		slog.Debug("Creating command", slog.String("command", command.Name))
 		_, err := conn.discord.ApplicationCommandCreate(conn.discord.State.User.ID, "", &discordgo.ApplicationCommand{
 			Name:        command.Name,
 			Type:        discordgo.ChatApplicationCommand,
