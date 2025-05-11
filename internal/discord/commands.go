@@ -27,8 +27,8 @@ type Option struct {
 	Type     OptionType
 	Required bool
 	// EnabledFunc returns true if the option is enabled.
-	// A nil EnabledFunc implicitly enables the option.
-	EnableFunc func(*state.State, *bot.Bot) bool
+	// A nil EnabledFunc implicitly enables the command.
+	EnabledFunc func(*state.State, *bot.Bot) bool
 }
 
 type OptionType int
@@ -59,7 +59,7 @@ var commands = []Command{
 				Name:        "auto",
 				Description: "auto play using AI suggestions",
 				Type:        OptionTypeBoolean,
-				EnableFunc: func(s *state.State, b *bot.Bot) bool {
+				EnabledFunc: func(s *state.State, b *bot.Bot) bool {
 					return b.OpenAIEnabled()
 				},
 			},

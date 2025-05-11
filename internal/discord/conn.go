@@ -46,10 +46,16 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 	slog.Debug("Registering commands")
 
 	for _, command := range commands {
-		options := make([]*discordgo.ApplicationCommandOption, len(command.Options))
-		for i, o := range command.Options {
-			if o.EnableFunc != nil {
-				if !o.EnableFunc(state, bot) {
+		if command.EnabledFunc != nil {
+			if !command.EnabledFunc(state, bot) {
+				continue
+			}
+		}
+
+		options := make([]*discordgo.ApplicationCommandOption, 0)
+		for _, o := range command.Options {
+			if o.EnabledFunc != nil {
+				if !o.EnabledFunc(state, bot) {
 					continue
 				}
 			}
@@ -60,16 +66,17 @@ func Dial(state *state.State, bot *bot.Bot) (*Conn, error) {
 			} else if o.Type == OptionTypeBoolean {
 				t = discordgo.ApplicationCommandOptionBoolean
 			}
-			options[i] = &discordgo.ApplicationCommandOption{
+			options = append(options, &discordgo.ApplicationCommandOption{
 				Name:        o.Name,
 				Description: o.Description,
 				Type:        t,
 				Required:    o.Required,
-			}
+			})
 		}
 
 		_, err := conn.discord.ApplicationCommandCreate(conn.discord.State.User.ID, "", &discordgo.ApplicationCommand{
 			Name:        command.Name,
+			Type:        discordgo.ChatApplicationCommand,
 			Description: command.Description,
 			Options:     options,
 		})
