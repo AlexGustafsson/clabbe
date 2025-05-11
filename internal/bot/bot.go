@@ -378,7 +378,7 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 		if err == nil {
 			failures = 0
 		} else if errors.Is(err, ErrUnsupportedAudioCodec) {
-			slog.Error("Failed to play unsupported entry", slog.String("title", entry.Title))
+			slog.Error("Failed to play unsupported entry", slog.String("title", entry.Title), slog.Any("error", err))
 			// Skip to next
 			// TODO: Communicate the failure - write in chat (currently no way to send
 			// messages from the bot) or get the URL immediately on queue and complain
