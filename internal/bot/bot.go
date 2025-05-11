@@ -360,8 +360,8 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 		b.mutex.Unlock()
 
 		if !ok {
-			if b.state.Config.ExtrapolateWhenEmpty {
-				slog.Debug("Playlist is empty, interpolating")
+			if b.OpenAIEnabled() && b.state.Config.ExtrapolateWhenEmpty {
+				slog.Debug("Playlist is empty, extrapolating")
 				err := b.Extrapolate(context.Background())
 				if err != nil {
 					return err
