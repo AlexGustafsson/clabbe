@@ -131,7 +131,7 @@ The code base consists of the following notable parts:
   samples immediately from a source to Discord.
 - `internal/ffmpeg` - an ffmpeg abstraction to play audio using ffplay.
   Currently only used for development tools.
-- `internal/openai` - an OpenAI API client.
+- `internal/llm` - LLM abstraction, ollama client.
 - `internal/state` - state management.
 - `internal/streaming`, `internal/streaming/youtube` - abstractions and
   implementations for searching for videos on YouTube and streaming them.

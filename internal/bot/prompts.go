@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/AlexGustafsson/clabbe/internal/openai"
+	"github.com/AlexGustafsson/clabbe/internal/llm"
 )
 
 //go:embed prompt-song-suggestion.tmpl
@@ -18,7 +18,7 @@ var defaultSongSuggestionTemplate string
 //go:embed prompt-theme-suggestion.tmpl
 var defaultThemeSuggestionTemplate string
 
-func NewThemeRequest() *openai.CompletionRequest {
+func NewThemeRequest() *llm.ChatRequest {
 	prompt := `Respond with themes for songs to include in a playlist. Respond with five themes, one theme per line, each containing at least four words. Don't include seasonal themes such as summer vibes or Christmas songs.
 Don't include the following words or similar words:
 Workout
@@ -53,27 +53,17 @@ Jazzy swing dance classics`, "\n")
 		selectedExamples[i] = examples[rand.IntN(len(examples))]
 	}
 
-	return &openai.CompletionRequest{
-		Messages: []openai.Message{
+	return &llm.ChatRequest{
+		Messages: []llm.Message{
 			{
-				Role:    openai.RoleSystem,
+				Role:    llm.RoleSystem,
 				Content: prompt,
-				// Content: "",
 			},
 			{
-				Role:    openai.RoleAssistant,
+				Role:    llm.RoleAssistant,
 				Content: strings.Join(selectedExamples, "\n"),
-				// Content: strings.Join([]string{}, "\n"),
 			},
 		},
-		Temperature: 1.2,
-		// 50*4(average token length)=200. 5 examples are typically 100 characters.
-		MaxTokens:        50,
-		TopP:             1,
-		FrequencyPenalty: 0.2,
-		PresencePenalty:  0.2,
-		Model:            openai.DefaultModel,
-		Stream:           false,
 	}
 }
 

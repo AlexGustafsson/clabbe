@@ -8,8 +8,6 @@ type Metrics struct {
 	SongsPlayed    prometheus.Counter
 	DurationPlayed prometheus.Counter
 	ActiveStreams  prometheus.Gauge
-
-	TokensConsumed prometheus.Counter
 }
 
 func NewMetrics() *Metrics {
@@ -32,13 +30,6 @@ func NewMetrics() *Metrics {
 			Name:      "active_streams",
 			Help:      "Number of currently active streams",
 		}),
-
-		TokensConsumed: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: "clabbe",
-			Subsystem: "openai",
-			Name:      "tokens_consumed_total",
-			Help:      "Total number of consumed tokens",
-		}),
 	}
 }
 
@@ -46,7 +37,6 @@ func NewMetrics() *Metrics {
 func (m *Metrics) Collect(c chan<- prometheus.Metric) {
 	m.SongsPlayed.Collect(c)
 	m.DurationPlayed.Collect(c)
-	m.TokensConsumed.Collect(c)
 }
 
 // Describe implements prometheus.Collector.

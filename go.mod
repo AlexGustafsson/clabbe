@@ -1,6 +1,6 @@
 module github.com/AlexGustafsson/clabbe
 
-go 1.24
+go 1.24.0
 
 toolchain go1.24.3
 
@@ -8,6 +8,7 @@ require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/kkdai/youtube/v2 v2.10.4
+	github.com/ollama/ollama v0.6.8
 	github.com/pion/rtp v1.8.15
 	github.com/pion/webrtc/v4 v4.1.0
 	github.com/prometheus/client_golang v1.22.0
@@ -27,7 +28,6 @@ require (
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/google/pprof v0.0.0-20250501235452-c0086092b71a // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

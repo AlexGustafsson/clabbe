@@ -60,7 +60,7 @@ var commands = []Command{
 				Description: "auto play using AI suggestions",
 				Type:        OptionTypeBoolean,
 				EnabledFunc: func(s *state.State, b *bot.Bot) bool {
-					return b.OpenAIEnabled()
+					return b.LLMEnabled()
 				},
 			},
 		},
@@ -94,7 +94,7 @@ var commands = []Command{
 			},
 		},
 		EnabledFunc: func(s *state.State, b *bot.Bot) bool {
-			return b.OpenAIEnabled()
+			return b.LLMEnabled()
 		},
 	},
 	{
@@ -102,7 +102,7 @@ var commands = []Command{
 		Description: "Print suggestions",
 		Action:      SuggestionsAction,
 		EnabledFunc: func(s *state.State, b *bot.Bot) bool {
-			return b.OpenAIEnabled()
+			return b.LLMEnabled()
 		},
 	},
 	{

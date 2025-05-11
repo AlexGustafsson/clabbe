@@ -11,8 +11,8 @@ import (
 )
 
 type Config struct {
-	DiscordBotToken string `yaml:"discordBotToken,omitempty" env:"DISCORD_BOT_TOKEN"`
-	OpenAIKey       string `yaml:"openAiApiKey,omitempty" env:"OPENAI_API_KEY"`
+	DiscordBotToken string        `yaml:"discordBotToken,omitempty" env:"DISCORD_BOT_TOKEN"`
+	Ollama          *OllamaConfig `yaml:"ollama,omitempty"`
 
 	ExtrapolateWhenEmpty  bool `yaml:"extrapolateWhenEmpty"`
 	ExtrapolationLookback int  `yaml:"extrapolationLookback"`
@@ -28,6 +28,11 @@ type Config struct {
 type PrometheusConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Port    uint16 `yaml:"port"`
+}
+
+type OllamaConfig struct {
+	Endpoint string `yaml:"endpoint"`
+	Model    string `yaml:"model"`
 }
 
 // DefaultConfig returns the default config.

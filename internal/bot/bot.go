@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlexGustafsson/clabbe/internal/openai"
+	"github.com/AlexGustafsson/clabbe/internal/llm"
 	"github.com/AlexGustafsson/clabbe/internal/state"
 	"github.com/AlexGustafsson/clabbe/internal/streaming"
 	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
@@ -35,7 +35,7 @@ type Bot struct {
 
 	state *state.State
 
-	openai *openai.Client
+	llm llm.Client
 
 	mutex         sync.Mutex
 	shouldPlay    bool
@@ -43,7 +43,7 @@ type Bot struct {
 	currentStream streaming.AudioStream
 }
 
-func New(state *state.State, openai *openai.Client) *Bot {
+func New(state *state.State, llm llm.Client) *Bot {
 	extrapolationType := ExtrapolationTypeNone
 	if state.Config.ExtrapolateWhenEmpty {
 		extrapolationType = ExtrapolationTypeHistory
@@ -54,7 +54,7 @@ func New(state *state.State, openai *openai.Client) *Bot {
 
 		state: state,
 
-		openai: openai,
+		llm: llm,
 	}
 }
 
@@ -65,50 +65,41 @@ func (b *Bot) Search(ctx context.Context, query string, useAI bool) ([]youtube.S
 	slog.Debug("Performing search", slog.String("query", query), slog.Bool("useAi", useAI))
 	queries := make([]string, 0)
 
-	if useAI && b.openai != nil {
+	if useAI && b.llm != nil {
 		slog.Debug("Extrapolating search using AI", slog.String("query", query))
-		res, err := b.openai.FetchCompletion(ctx, &openai.CompletionRequest{
-			Messages: []openai.Message{
+		res, err := b.llm.Chat(ctx, &llm.ChatRequest{
+			Messages: []llm.Message{
 				{
-					Role:    openai.RoleSystem,
+					Role:    llm.RoleSystem,
 					Content: b.state.Config.Prompt,
 				},
 				{
-					Role:    openai.RoleUser,
+					Role:    llm.RoleUser,
 					Content: query,
 				},
 			},
-			Temperature:      1,
-			MaxTokens:        256,
-			TopP:             1,
-			FrequencyPenalty: 0,
-			PresencePenalty:  0,
-			Model:            openai.DefaultModel,
-			Stream:           false,
 		})
 		if err != nil {
 			return nil, err
 		}
-		b.state.Metrics.TokensConsumed.Add(float64(res.Usage.TotalTokens))
 
-		if len(res.Choices) > 0 {
-			response := res.Choices[0].Message.Content
-			if response == "no results" {
-				slog.Debug("No results from LLM")
-				return []youtube.SearchResult{}, nil
-			}
-			slog.Debug("Got response from AI", slog.String("response", response))
-
-			// TODO: Assume default prompt for now
-			entries := strings.Split(response, "\n")
-			for _, entry := range entries {
-				// The default output has indexes, remove them
-				_, query, _ := strings.Cut(entry, " ")
-				queries = append(queries, query)
-			}
-		} else {
+		if len(res.Message.Content) == 0 {
 			slog.Debug("No response from LLM")
 			return []youtube.SearchResult{}, nil
+		}
+
+		if res.Message.Content == "no results" {
+			slog.Debug("No results from LLM")
+			return []youtube.SearchResult{}, nil
+		}
+		slog.Debug("Got response from AI", slog.String("response", res.Message.Content))
+
+		// TODO: Assume default prompt for now
+		entries := strings.Split(res.Message.Content, "\n")
+		for _, entry := range entries {
+			// The default output has indexes, remove them
+			_, query, _ := strings.Cut(entry, " ")
+			queries = append(queries, query)
 		}
 	} else {
 		// Use query verbatim as use of AI was not requested
@@ -227,7 +218,7 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 	}
 
 	// If no suggestions were ready, extrapolate using AI
-	if b.openai == nil {
+	if b.llm == nil {
 		b.mutex.Unlock()
 		return fmt.Errorf("missing required Open AI client")
 	}
@@ -243,18 +234,17 @@ func (b *Bot) Extrapolate(ctx context.Context) error {
 
 func (b *Bot) extrapolateWithThemeSuggestions(ctx context.Context) error {
 	slog.Debug("Extrapolating songs based on suggestions of new themes")
-	res, err := b.openai.FetchCompletion(ctx, NewThemeRequest())
+	res, err := b.llm.Chat(ctx, NewThemeRequest())
 	if err != nil {
 		return err
 	}
-	b.state.Metrics.TokensConsumed.Add(float64(res.Usage.TotalTokens))
 
-	if len(res.Choices) == 0 {
+	if len(res.Message.Content) == 0 {
 		slog.Debug("No response from LLM")
 		return nil
 	}
 
-	response := res.Choices[0].Message.Content
+	response := res.Message.Content
 	if response == "no results" {
 		slog.Debug("No results from LLM")
 		return nil
@@ -288,48 +278,39 @@ func (b *Bot) extrapolateWithHistory(ctx context.Context) error {
 	b.mutex.Unlock()
 
 	slog.Debug("Extrapolating songs based on history", slog.String("history", lookback.String()))
-	res, err := b.openai.FetchCompletion(ctx, &openai.CompletionRequest{
-		Messages: []openai.Message{
+	res, err := b.llm.Chat(ctx, &llm.ChatRequest{
+		Messages: []llm.Message{
 			{
-				Role:    openai.RoleSystem,
+				Role:    llm.RoleSystem,
 				Content: b.state.Config.Prompt,
 			},
 			{
-				Role:    openai.RoleAssistant,
+				Role:    llm.RoleAssistant,
 				Content: lookback.String(),
 			},
 			{
-				Role:    openai.RoleUser,
+				Role:    llm.RoleUser,
 				Content: "provide similar songs",
 			},
 		},
-		Temperature:      1,
-		MaxTokens:        256,
-		TopP:             1,
-		FrequencyPenalty: 0,
-		PresencePenalty:  0,
-		Model:            openai.DefaultModel,
-		Stream:           false,
 	})
 	if err != nil {
 		return err
 	}
-	b.state.Metrics.TokensConsumed.Add(float64(res.Usage.TotalTokens))
 
-	if len(res.Choices) == 0 {
+	if len(res.Message.Content) == 0 {
 		slog.Debug("No response from LLM")
 		return nil
 	}
 
-	response := res.Choices[0].Message.Content
-	if response == "no results" {
+	if res.Message.Content == "no results" {
 		slog.Debug("No results from LLM")
 		return nil
 	}
-	slog.Debug("Got response from Open AI", slog.String("response", response))
+	slog.Debug("Got response from Open AI", slog.String("response", res.Message.Content))
 
 	// TODO: Assume default prompt for now
-	lines := strings.Split(response, "\n")
+	lines := strings.Split(res.Message.Content, "\n")
 	for _, line := range lines {
 		_, query, _ := strings.Cut(line, " ")
 		entity := state.Entity{
@@ -360,7 +341,7 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 		b.mutex.Unlock()
 
 		if !ok {
-			if b.OpenAIEnabled() && b.state.Config.ExtrapolateWhenEmpty {
+			if b.LLMEnabled() && b.state.Config.ExtrapolateWhenEmpty {
 				slog.Debug("Playlist is empty, extrapolating")
 				err := b.Extrapolate(context.Background())
 				if err != nil {
@@ -516,6 +497,6 @@ func (b *Bot) NowPlaying() *state.PlaylistEntry {
 	return b.currentEntry
 }
 
-func (b *Bot) OpenAIEnabled() bool {
-	return b.openai != nil
+func (b *Bot) LLMEnabled() bool {
+	return b.llm != nil
 }

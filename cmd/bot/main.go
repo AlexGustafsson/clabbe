@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,19 +15,26 @@ import (
 
 	"github.com/AlexGustafsson/clabbe/internal/bot"
 	"github.com/AlexGustafsson/clabbe/internal/discord"
-	"github.com/AlexGustafsson/clabbe/internal/openai"
+	"github.com/AlexGustafsson/clabbe/internal/llm"
+	"github.com/AlexGustafsson/clabbe/internal/llm/ollama"
 	"github.com/AlexGustafsson/clabbe/internal/state"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func run(ctx context.Context, state *state.State) error {
-	var openAIClient *openai.Client
-	if state.Config.OpenAIKey != "" {
-		openAIClient = openai.NewClient(state.Config.OpenAIKey)
+	var llmClient llm.Client
+	if state.Config.Ollama != nil {
+		url, err := url.Parse(state.Config.Ollama.Endpoint)
+		if err != nil {
+			slog.Error("Failed to parse ollama URL", slog.Any("error", err))
+			return err
+		}
+
+		llmClient = ollama.NewClient(url, state.Config.Ollama.Model, nil)
 	}
 
-	bot := bot.New(state, openAIClient)
+	bot := bot.New(state, llmClient)
 	var conn *discord.Conn
 
 	if state.Config.Prometheus.Enabled {
@@ -121,8 +129,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if state.Config.OpenAIKey == "" {
-		slog.Warn("Missing OpenAI API key - disabling advanced features")
+	if state.Config.Ollama == nil {
+		slog.Warn("Missing ollama config - disabling advanced features")
 	}
 
 	// Exit on SIGINT or SIGTERM
