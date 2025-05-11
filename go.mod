@@ -15,6 +15,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+replace github.com/kkdai/youtube/v2 v2.10.4 => github.com/AlexGustafsson/youtube/v2 v2.10.5-0.20250511081928-46807c6833f4
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-simplejson v0.5.1 // indirect
