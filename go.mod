@@ -9,7 +9,7 @@ require (
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/kkdai/youtube/v2 v2.10.4
 	github.com/ollama/ollama v0.9.0
-	github.com/pion/rtp v1.8.16
+	github.com/pion/rtp v1.8.18
 	github.com/pion/webrtc/v4 v4.1.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/stretchr/testify v1.10.0
