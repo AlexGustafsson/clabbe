@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM} golang:1.24.3 as builder
+FROM --platform=${BUILDPLATFORM} golang:1.24.4 as builder
 
 WORKDIR /src
 
