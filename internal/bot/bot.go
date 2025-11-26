@@ -12,9 +12,9 @@ import (
 
 	"github.com/AlexGustafsson/clabbe/internal/llm"
 	"github.com/AlexGustafsson/clabbe/internal/state"
-	"github.com/AlexGustafsson/clabbe/internal/streaming"
-	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
 	"github.com/AlexGustafsson/clabbe/internal/webm"
+	"github.com/AlexGustafsson/clabbe/internal/youtube"
+	"github.com/AlexGustafsson/clabbe/internal/ytdlp"
 )
 
 var (
@@ -37,10 +37,12 @@ type Bot struct {
 
 	llm llm.Client
 
-	mutex         sync.Mutex
-	shouldPlay    bool
-	currentEntry  *state.PlaylistEntry
-	currentStream streaming.AudioStream
+	mutex        sync.Mutex
+	shouldPlay   bool
+	currentEntry *state.PlaylistEntry
+
+	isStreaming  bool
+	cancelStream context.CancelFunc
 }
 
 func New(state *state.State, llm llm.Client) *Bot {
@@ -327,7 +329,7 @@ func (b *Bot) extrapolateWithHistory(ctx context.Context) error {
 // Play starts playing content, sending windows of OPUS-encoded audio to the
 // provided channel.
 func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
-	if b.currentStream != nil {
+	if b.isStreaming {
 		return fmt.Errorf("already playing")
 	}
 
@@ -378,61 +380,56 @@ func (b *Bot) Play(opus chan<- []byte, songs chan<- string) error {
 // provided channel.
 func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	slog.Debug("Playing", slog.String("uri", entry.URI), slog.String("title", entry.Title), slog.String("source", string(entry.Source)))
-	defer func() {
-		b.currentEntry = nil
-		b.currentStream = nil
-	}()
 
-	// For now, assume YouTube as source
+	ctx, cancel := context.WithCancel(context.Background())
+
 	b.mutex.Lock()
-	stream, err := youtube.NewAudioStream(context.Background(), entry.URI, nil)
-	if err != nil {
-		slog.Error("Failed to create YouTube audio stream", slog.Any("error", err))
-		b.mutex.Unlock()
-		return err
-	}
-	defer stream.Close()
-
-	if !strings.EqualFold(stream.MimeType(), `audio/webm; codecs="opus"`) {
-		// For now, don't support other formats as they would need to be processed
-		// by ffmpeg
-		b.mutex.Unlock()
-		return fmt.Errorf("%w: %s", ErrUnsupportedAudioCodec, stream.MimeType())
-	}
-
-	webmReader := webm.NewReader(stream)
-
 	b.currentEntry = &entry
-	b.currentStream = stream
+	b.isStreaming = true
+	b.cancelStream = cancel
 	b.state.History.AddEntry(entry)
 	b.mutex.Unlock()
 
-	b.state.Metrics.SongsPlayed.Inc()
-	b.state.Metrics.ActiveStreams.Inc()
-	playbackStarted := time.Now()
-	defer func() {
-		b.state.Metrics.DurationPlayed.Add(time.Since(playbackStarted).Seconds())
-		b.state.Metrics.ActiveStreams.Dec()
+	reader, writer := io.Pipe()
+	webmReader := webm.NewReader(reader)
+	go func() {
+		for {
+			frame, err := webmReader.Read()
+			if err == io.EOF {
+				slog.Debug("Stream ended")
+				break
+			} else if err == io.ErrClosedPipe {
+				slog.Debug("Stream closed")
+				break
+			} else if err != nil {
+				slog.Error("Failed to read webm OPUS frame", slog.Any("error", err))
+				cancel()
+				break
+			}
+
+			opus <- frame.Payload
+		}
 	}()
 
-	for {
-		frame, err := webmReader.Read()
-		if err == io.EOF {
-			slog.Debug("Stream ended")
-			break
-		} else if err == io.ErrClosedPipe {
-			slog.Debug("Stream closed")
-			break
-		} else if err != nil {
-			slog.Error("Failed to read webm OPUS frame", slog.Any("error", err))
-			return err
-		}
+	b.state.Metrics.SongsPlayed.Inc()
+	b.state.Metrics.ActiveStreams.Inc()
 
-		opus <- frame.Payload
-	}
+	playbackStarted := time.Now()
 
-	slog.Debug("Stopped playing stream", slog.String("source", string(entry.Source)), slog.String("uri", entry.URI), slog.String("title", stream.Title()))
-	return nil
+	// TODO: Catch specific errors, like unsupported codec / not found
+	err := ytdlp.Stream(ctx, entry.URI, writer)
+
+	b.state.Metrics.DurationPlayed.Add(time.Since(playbackStarted).Seconds())
+	b.state.Metrics.ActiveStreams.Dec()
+
+	b.mutex.Lock()
+	b.currentEntry = nil
+	b.isStreaming = false
+	b.cancelStream = nil
+	b.mutex.Unlock()
+
+	slog.Debug("Stopped playing stream", slog.String("source", string(entry.Source)), slog.String("uri", entry.URI), slog.String("title", entry.Title))
+	return err
 }
 
 // ClearPlaylist clears all entries of the playlist.
@@ -462,8 +459,8 @@ func (b *Bot) Stop() {
 	b.shouldPlay = false
 	// b.ClearPlaylist()
 	// b.ClearSuggestions()
-	if b.currentStream != nil {
-		b.currentStream.Close()
+	if b.isStreaming {
+		b.cancelStream()
 	}
 
 	b.ExtrapolationType = ExtrapolationTypeNone
@@ -486,9 +483,9 @@ func (b *Bot) SkipN(n int) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	if b.currentStream != nil {
+	if b.isStreaming {
 		b.state.Queue.PopN(n - 1)
-		b.currentStream.Close()
+		b.cancelStream()
 	}
 }
 

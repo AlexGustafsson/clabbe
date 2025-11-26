@@ -3,17 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/AlexGustafsson/clabbe/internal/ffmpeg"
-	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
-	"github.com/AlexGustafsson/clabbe/internal/webm"
-	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	"github.com/AlexGustafsson/clabbe/internal/youtube"
+	"github.com/AlexGustafsson/clabbe/internal/ytdlp"
 )
 
 func run(ctx context.Context, query string) error {
@@ -26,19 +23,6 @@ func run(ctx context.Context, query string) error {
 		return fmt.Errorf("no results")
 	}
 
-	slog.Debug("Creating audio stream", slog.String("id", results[0].ID))
-	stream, err := youtube.NewAudioStream(ctx, results[0].ID, nil)
-	if err != nil {
-		slog.Error("Failed to fetch audio stream", slog.Any("error", err))
-		return err
-	}
-
-	go func() {
-		<-ctx.Done()
-		slog.Debug("Closing stream")
-		stream.Close()
-	}()
-
 	slog.Debug("Initializing new player")
 	player, err := ffmpeg.NewPlayer()
 	if err != nil {
@@ -46,35 +30,11 @@ func run(ctx context.Context, query string) error {
 		return err
 	}
 
-	// As plain OPUS has very little support in players, mux it back to an ogg
-	// file
-	ogg, err := oggwriter.NewWith(player, 44000, 2)
+	slog.Debug("Starting stream")
+	err = ytdlp.Stream(ctx, results[0].ID, player)
 	if err != nil {
-		slog.Error("Failed to create OGG writer", slog.Any("error", err))
+		slog.Error("Failed to stream", slog.Any("error", err))
 		return err
-	}
-	defer ogg.Close()
-
-	reader := webm.NewReader(stream)
-	for {
-		frame, err := reader.Read()
-		if err == io.EOF {
-			slog.Debug("Stream ended")
-			break
-		} else if err == io.ErrClosedPipe {
-			slog.Debug("Stream closed")
-			break
-		} else if err != nil {
-			slog.Error("Failed to read webm OPUS frame", slog.Any("error", err))
-			return err
-		}
-
-		ogg.WriteRTP(&rtp.Packet{
-			Header: rtp.Header{
-				Timestamp: uint32(frame.Timecode),
-			},
-			Payload: frame.Payload,
-		})
 	}
 
 	return nil

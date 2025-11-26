@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/AlexGustafsson/clabbe/internal/bot"
-	"github.com/AlexGustafsson/clabbe/internal/streaming/youtube"
+	"github.com/AlexGustafsson/clabbe/internal/youtube"
 )
 
 func PlayAction(ctx *Context, conn *Conn) (string, error) {
