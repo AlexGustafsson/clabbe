@@ -8,9 +8,9 @@ require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/caarlos0/env/v10 v10.0.0
 	github.com/kkdai/youtube/v2 v2.10.4
-	github.com/ollama/ollama v0.13.0
-	github.com/pion/rtp v1.8.25
-	github.com/pion/webrtc/v4 v4.1.6
+	github.com/ollama/ollama v0.13.1
+	github.com/pion/rtp v1.8.26
+	github.com/pion/webrtc/v4 v4.1.7
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
