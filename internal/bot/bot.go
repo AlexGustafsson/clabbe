@@ -420,6 +420,13 @@ func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	// TODO: err is "signal: killed" on normal shut down (e.g. skip), should be
 	// ignored
 	err := ytdlp.Stream(ctx, entry.URI, writer)
+	var ytdlpErr ytdlp.Error
+	if errors.As(err, &ytdlpErr) {
+		slog.Error("Failed to stream using yt-dlp", slog.String("stderr", ytdlpErr.Stderr))
+		return err
+	} else if err != nil {
+		return err
+	}
 
 	b.state.Metrics.DurationPlayed.Add(time.Since(playbackStarted).Seconds())
 	b.state.Metrics.ActiveStreams.Dec()

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,7 +33,11 @@ func run(ctx context.Context, query string) error {
 
 	slog.Debug("Starting stream")
 	err = ytdlp.Stream(ctx, results[0].ID, player)
-	if err != nil {
+	var ytdlpErr ytdlp.Error
+	if errors.As(err, &ytdlpErr) {
+		slog.Error("Failed to stream using yt-dlp", slog.String("stderr", ytdlpErr.Stderr))
+		return err
+	} else if err != nil {
 		slog.Error("Failed to stream", slog.Any("error", err))
 		return err
 	}
