@@ -417,6 +417,8 @@ func (b *Bot) playOnce(entry state.PlaylistEntry, opus chan<- []byte) error {
 	playbackStarted := time.Now()
 
 	// TODO: Catch specific errors, like unsupported codec / not found
+	// TODO: err is "signal: killed" on normal shut down (e.g. skip), should be
+	// ignored
 	err := ytdlp.Stream(ctx, entry.URI, writer)
 
 	b.state.Metrics.DurationPlayed.Add(time.Since(playbackStarted).Seconds())
