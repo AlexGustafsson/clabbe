@@ -12,11 +12,13 @@ COPY cmd cmd
 COPY internal internal
 
 ARG TARGETARCH
-RUN GOARCH=${TARGETARCH} CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-extldflags=-static -w -s' -o bot cmd/bot/main.go
+RUN GOOS=linux GOARCH=${TARGETARCH} CGO_ENABLED=0 go build -ldflags='-extldflags=-static -w -s' -o bot cmd/bot/main.go
 
 FROM python:3.14.2-alpine
 
-RUN python3 -m pip install yt-dlp==2025.12.08
+RUN apk add --no-cache deno
+
+RUN python3 -m pip install "yt-dlp[default]==2025.12.08"
 
 COPY --from=builder /src/bot /bot
 
