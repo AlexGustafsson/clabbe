@@ -2,7 +2,7 @@ module github.com/AlexGustafsson/clabbe
 
 go 1.25
 
-toolchain go1.25.4
+toolchain go1.25.5
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
