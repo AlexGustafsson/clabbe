@@ -2,19 +2,18 @@
 
 ![Banner containg usage examples](.github/banner.png)
 
-A personal DJ that can be used locally or as a Discord bot. Uses AI to queue new
-songs based on suggestions and recently played songs. Songs are fetched from
-YouTube.
+A personal DJ that can be used locally or as a Discord bot. Optionally uses AI
+to queue new songs based on suggestions and recently played songs. Songs are
+fetched from YouTube.
 
 Clabbe is named after a Swedish DJ.
 
 ## Features
 
-- 🤖 Uses AI to take requests and extrapolate new songs to play
+- 🤖 Optionally uses AI to take requests and extrapolate new songs to play
 - 🎹 Fetches songs from YouTube
-- 🔥 Focus on performance. Docker image is 13MiB. Uses about 10MB of RAM at
-  runtime and virtually zero CPU. Other bots can use hundreds of megabytes of
-  RAM and up to one CPU core.
+- 🔥 Focus on performance. Uses about 10MB of RAM at runtime and virtually zero
+  CPU. Other bots can use hundreds of megabytes of RAM and up to one CPU core.
 - 🚀 Easy to setup. Zero-config other than bot token necessary for basic
   functionality
 - 🛰️ Prometheus metrics, liveliness and readiness probe support for maintainable
@@ -133,21 +132,16 @@ The code base consists of the following notable parts:
   Currently only used for development tools.
 - `internal/llm` - LLM abstraction, ollama client.
 - `internal/state` - state management.
-- `internal/streaming`, `internal/streaming/youtube` - abstractions and
-  implementations for searching for videos on YouTube and streaming them.
+- `internal/streaming/youtube` - abstractions and implementations for searching
+  for videos on YouTube.
+- `internal/ytdlb` - yt-dlp wrapper.
 
 ### Building
 
-Clabbe is written in Go. To build on host, Go 1.22 or later is required.
+Clabbe is written in Go and meant to run in Docker.
 
 ```shell
-go build -o bot cmd/bot/main.go
-```
-
-It's also possible to build Clabbe using Docker.
-
-```shell
-DOCKER_BUILDKIT=1 docker build --output=. .
+docker build -t ghcr.io/alexgustafsson/clabbe .
 ```
 
 ### Use of LLM
