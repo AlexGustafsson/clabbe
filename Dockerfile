@@ -1,4 +1,4 @@
-FROM --platform=${BUILDPLATFORM} golang:1.25.6 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.25.7 AS builder
 
 WORKDIR /src
 
@@ -14,7 +14,7 @@ COPY internal internal
 ARG TARGETARCH
 RUN GOOS=linux GOARCH=${TARGETARCH} CGO_ENABLED=0 go build -ldflags='-extldflags=-static -w -s' -o bot cmd/bot/main.go
 
-FROM python:3.14.2-alpine
+FROM python:3.14.3-alpine
 
 RUN apk add --no-cache deno
 
