@@ -14,7 +14,7 @@ COPY internal internal
 ARG TARGETARCH
 RUN GOOS=linux GOARCH=${TARGETARCH} CGO_ENABLED=0 go build -ldflags='-extldflags=-static -w -s' -o bot cmd/bot/main.go
 
-FROM python:3.15.0b3-alpine
+FROM python:3.15.0b4-alpine
 
 RUN apk add --no-cache deno
 
