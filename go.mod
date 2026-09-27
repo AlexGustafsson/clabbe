@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/caarlos0/env/v10 v10.0.0
-	github.com/ollama/ollama v0.34.0
+	github.com/ollama/ollama v0.34.3
 	github.com/pion/rtp v1.10.5
 	github.com/pion/webrtc/v4 v4.2.20
 	github.com/prometheus/client_golang v1.24.1

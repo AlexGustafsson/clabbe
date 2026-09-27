@@ -35,8 +35,8 @@ github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/ollama/ollama v0.34.0 h1:6BrPUjSiGVuYz+Um6YawOrZanVXeurjjfX2rRVpRR3E=
-github.com/ollama/ollama v0.34.0/go.mod h1:D2fxVZuCQ7KQqszQMNx+k21Ig8hQEAWOwDIPFgwB8C8=
+github.com/ollama/ollama v0.34.3 h1:06t/siYJDFL1dqT/JE4ueMfAy8T38U3hzq70idpiOdA=
+github.com/ollama/ollama v0.34.3/go.mod h1:6dxickvQom7AD4B7WNKh3Q5upVifPrF2EJd4vaNkZg8=
 github.com/pion/randutil v0.1.0 h1:CFG1UdESneORglEsnimhUjf33Rwjubwj6xfiOXBa3mA=
 github.com/pion/randutil v0.1.0/go.mod h1:XcJrSMMbbMRhASFVOlj/5hQial/Y8oH/HVo7TBZq+j8=
 github.com/pion/rtp v1.10.5 h1:ip0HhO/wYZqQ4bKS+R99KnZh/GRCmIT0jDXikub7vlE=
