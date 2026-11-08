@@ -1,13 +1,13 @@
 module github.com/AlexGustafsson/clabbe
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/caarlos0/env/v10 v10.0.0
-	github.com/ollama/ollama v0.40.6
-	github.com/pion/rtp v1.10.5
-	github.com/pion/webrtc/v4 v4.2.24
+	github.com/ollama/ollama v0.40.13
+	github.com/pion/rtp v1.10.6
+	github.com/pion/webrtc/v4 v4.2.26
 	github.com/prometheus/client_golang v1.25.0
 	github.com/stretchr/testify v1.12.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -18,7 +18,7 @@ replace github.com/bwmarrin/discordgo => github.com/Richy-Z/discordgo v0.29.1-0.
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
@@ -32,8 +32,8 @@ require (
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
